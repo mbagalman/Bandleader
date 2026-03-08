@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "bandleader"
+version = "2.0.0"
+description = "Audio stem processing and generation pipeline for AI-generated music"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mido",
+    "pyyaml",
+    "numpy",
+    "scipy",
+    "librosa",
+    "pydub",
+]
+
+[project.optional-dependencies]
+# madmom is optional: drum_cleaner falls back to librosa if unavailable.
+# macOS: brew install libsndfile first
+# Linux: apt-get install libsndfile1-dev first
+drums = ["madmom"]
+
+[project.scripts]
+bandleader       = "bandleader.bandleader:main"
+bandleader-drums = "bandleader.drum_cleaner:main"
+bandleader-stems = "bandleader.stem_cleaner:main"
+bandleader-synth = "bandleader.synth_cleaner:main"
+bandleader-bass  = "bandleader.bass_generator:main"
+bandleader-arp   = "bandleader.arp_generator:main"
+bandleader-sidechain = "bandleader.sidechain_trigger:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bandleader*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
