@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.1.0] - 2026-05-29
+
 ### Added
 - Generator timing now handles denominator-aware time signatures (for example `6/8`).
 - Pad segmentation is now robust for dense chord bars.

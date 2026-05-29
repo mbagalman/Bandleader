@@ -1,13 +1,39 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bandleader"
-version = "2.0.0"
-description = "Audio stem processing and generation pipeline for AI-generated music"
+version = "0.1.0"
+description = "Deterministic post-production tools for AI-generated music stems"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Michael Bagalman" },
+]
+keywords = [
+    "audio",
+    "music",
+    "midi",
+    "stems",
+    "post-production",
+    "ai-music",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: MIDI",
+]
 dependencies = [
     "mido",
     "pyyaml",
@@ -16,6 +42,12 @@ dependencies = [
     "librosa",
     "pydub",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mbagalman/Bandleader"
+Repository = "https://github.com/mbagalman/Bandleader"
+Issues = "https://github.com/mbagalman/Bandleader/issues"
+Changelog = "https://github.com/mbagalman/Bandleader/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # madmom is optional: drum_cleaner falls back to librosa if unavailable.

@@ -1,141 +1,163 @@
-# The Bandleader 🎸
+# Bandleader
 
-**Deterministic Post-Production for AI-Generated Music Stems**
+**Deterministic post-production for AI-generated music stems.**
 
-Bandleader is a rule-based Python toolkit for cleaning, re-synthesizing, and augmenting AI-generated stems (Suno, Udio, etc.).
+Bandleader is a rule-based Python toolkit for cleaning, re-synthesizing, and augmenting AI-generated stems from tools such as Suno, Udio, and similar music generators.
 
-AI generators are great at **vibe**.
-They are terrible at **details**.
+AI music generators are great at vibe. They are often much worse at details: muddy drums, uneven vocal levels, fuzzy synths, weak low end, and stems that need manual cleanup before they feel usable in a DAW.
 
-Bandleader fixes the details — without touching the vibe.
+Bandleader helps with those details without changing the musical idea. It keeps the timing and feel, then adds deterministic processing around it: cleaner drums, safer MIDI bass and arpeggio layers, optional loudness normalization, sidechain helpers, and phase-alignment checks.
 
----
+## What Bandleader Does
 
-## Core Philosophy
+At a high level, Bandleader takes a folder of stems plus a `song_config.yaml` file and writes cleaned or generated assets into a `generated/` folder.
 
-* Keep the timing and feel.
-* Replace fuzzy audio with clean deterministic layers.
-* Generate harmonically safe MIDI additions.
-* Produce mix-ready stems for your DAW.
-
-No hallucinated notes.
-No black box magic.
-Just reproducible musical logic.
-
----
-
-# What’s Included
-
-| Command            | Purpose                                            |
-| ------------------ | -------------------------------------------------- |
-| `bandleader`       | Full pipeline orchestrator                         |
-| `bandleader-drums` | Re-synthesize AI drum stems via MIDI transcription |
-| `bandleader-stems` | Corrective EQ / compression via FFmpeg             |
-| `bandleader-synth` | Transcribe + re-synthesize monophonic leads        |
-| `bandleader-bass`  | Rule-based MIDI bass generation                    |
-| `bandleader-arp`   | Rule-based MIDI arpeggio + pad generation          |
-
----
-
-# Workflow Overview
-
-```
-Suno / Udio Stems
-        │
-        ├── clean_drums
-        ├── clean_vocals
-        ├── clean_synth (optional)
-        ├── generate_bass
-        ├── generate_arp
-        │
-        ↓
-generated/
-    gen_*.wav
-    gen_*.mid
-    preview_mix.mp3
-        ↓
-Import into DAW → Mix → Master
+```text
+Suno / Udio stems
+  -> clean drums
+  -> clean vocals
+  -> optionally clean synth
+  -> optionally generate bass
+  -> optionally generate arpeggio or pad
+  -> optionally phase-align related stems
+  -> export WAV, MIDI, reports, and preview mix
 ```
 
----
+You can run the full orchestrator, or run the individual tools directly.
 
-# Installation
+| Command | Purpose |
+| --- | --- |
+| `bandleader` | Full pipeline orchestrator |
+| `bandleader-drums` | Re-synthesize AI drum stems from detected hits |
+| `bandleader-stems` | Apply conservative corrective EQ, compression, and normalization via FFmpeg |
+| `bandleader-synth` | Re-synthesize monophonic synth or lead stems |
+| `bandleader-bass` | Generate deterministic MIDI bass parts from a chord progression |
+| `bandleader-arp` | Generate deterministic arpeggio or pad parts from a chord progression |
+| `bandleader-sidechain` | Generate sidechain trigger assets |
 
-## System Dependencies
+## Who This Is For
 
-### FFmpeg (required)
+Bandleader is useful if you:
+
+- Generate songs with Suno, Udio, or similar tools and want cleaner DAW-ready stems.
+- Want deterministic MIDI layers instead of another black-box generation pass.
+- Need repeatable post-production steps for multiple AI-generated songs.
+- Are comfortable editing a small YAML config file.
+
+It is currently a developer-friendly music production tool, not a one-click desktop app.
+
+## Requirements
+
+You need:
+
+- Python 3.10 or newer
+- FFmpeg
+- FluidSynth
+- At least one `.sf2` soundfont for rendered MIDI parts
+
+Optional:
+
+- `madmom` for better drum transcription
+
+### Install System Tools
+
+macOS:
 
 ```bash
-brew install ffmpeg          # macOS
-sudo apt-get install ffmpeg  # Linux
+brew install ffmpeg fluid-synth
 ```
 
-### FluidSynth (required for MIDI rendering)
+Linux:
 
 ```bash
-brew install fluid-synth
-sudo apt-get install fluidsynth
+sudo apt-get install ffmpeg fluidsynth
 ```
 
----
-
-## Install Python Package
+Windows users can install FFmpeg and FluidSynth with the package manager or installers they prefer. Make sure both commands are available in your terminal:
 
 ```bash
-git clone https://github.com/yourusername/bandleader.git
-cd bandleader
+ffmpeg -version
+fluidsynth --version
+```
+
+## Install Bandleader
+
+Clone the repo and install it in editable mode:
+
+```bash
+git clone https://github.com/mbagalman/Bandleader.git
+cd Bandleader
 pip install -e .
 ```
 
-Optional (better drum transcription):
+Optional drum transcription extra:
 
 ```bash
 pip install -e ".[drums]"
 ```
 
----
+If your system does not expose `pip` directly, use:
 
-## Quickstart (First Successful Run)
-
-1. Verify external tools:
 ```bash
-ffmpeg -version
-fluidsynth --version
+python -m pip install -e .
 ```
-2. Create a song workspace:
+
+## Quickstart
+
+Create a song workspace:
+
 ```bash
 mkdir -p MySong/raw_stems
 cp song_config.example.yaml MySong/song_config.yaml
 ```
-3. Edit `MySong/song_config.yaml`:
-set real `.sf2` paths under `soundfonts`, and confirm stem keywords under `stems` match your filenames.
-4. Put source stems in `MySong/raw_stems/` (for example files containing `drums`, `vocals`, `synth` in the names).
-5. Run orchestrator:
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force MySong\raw_stems
+Copy-Item song_config.example.yaml MySong\song_config.yaml
+```
+
+Put your source stems into `MySong/raw_stems/`. The filenames should contain the keywords from your config, such as:
+
+```text
+MySong/
+  raw_stems/
+    drums.wav
+    vocals.wav
+    synth.wav
+  song_config.yaml
+```
+
+Edit `MySong/song_config.yaml`:
+
+- Set the correct `bpm`, `time_signature`, `progression`, and `bars`.
+- Set real `.sf2` paths under `soundfonts`.
+- Confirm the `stems` keywords match your filenames.
+- Disable any pipeline steps you do not want yet.
+
+Run the orchestrator:
+
 ```bash
 bandleader ./MySong --verbose
 ```
-6. Expected outputs:
-generated stems in `MySong/generated/` named `gen_*.wav`, generated MIDI named `gen_*.mid`, and preview mix at `MySong/generated/preview_mix.mp3` (if ffmpeg mix step succeeds).
 
-Troubleshooting:
-1. If `bandleader` command is missing, run `pip install -e .` in the repo.
-2. If dependencies are missing, install from `requirements.txt` or reinstall editable package.
+Outputs are written to:
 
----
-
-# Configuration
-
-Each song folder must contain:
-
-```
-song_config.yaml
+```text
+MySong/generated/
 ```
 
-If missing, `bandleader` will print an example config and exit.
+Typical outputs include:
 
----
+- `gen_*.wav` generated or cleaned audio stems
+- `gen_*.mid` generated MIDI files
+- `preview_mix.mp3` if the preview mix step succeeds
+- `phase_alignment_report.json` if phase alignment is enabled
 
-## song_config.yaml (Current Format)
+## A Minimal First Config
+
+For a first successful run, start small. Disable the optional synth, arp, and phase alignment passes until the basic path works.
 
 ```yaml
 song:
@@ -147,18 +169,12 @@ song:
 stems:
   drums: "drums"
   vocals: "vocals"
-  synth: "synth"
-  overheads: "overheads"
-  guitars: "guitars"
 
 soundfonts:
   drums: "/path/to/drums.sf2"
   bass: "/path/to/bass.sf2"
-  arp: "/path/to/arp.sf2"
-  synth: "/path/to/synth.sf2"
 
 pipeline:
-
   clean_drums:
     enabled: true
     use_madmom: false
@@ -167,76 +183,68 @@ pipeline:
   clean_vocals:
     enabled: true
     normalize: false
-    target_lufs: -18.0
-    target_true_peak: -1.5
-    target_lra: 11.0
 
   generate_bass:
     enabled: true
     style: "two_feel"
     sidechain_ducking: false
-    ducking_depth: 0.35
-    ducking_attack_ms: 10.0
-    ducking_release_ms: 120.0
 
   generate_arp:
     enabled: false
-    style: "eighths"
-    motion: "updown"
 
   phase_align:
     enabled: false
-    max_shift_ms: 12.0
-    min_confidence: 0.35
-    pair_kick_bass: true
-    pair_snare_overheads: false
-    pair_bass_guitars: false
 
   clean_synth:
     enabled: false
 ```
 
-### Important Notes
+For the full config schema, use [song_config.example.yaml](song_config.example.yaml).
 
-* `use_madmom: true` enables neural net drum detection (higher accuracy).
-* `export_sidechain_trigger: true` exports `gen_sidechain_trigger.mid/.wav` from kick timing.
-* `normalize: true` under `clean_vocals` enables LUFS normalization using configured targets.
-* `sidechain_ducking: true` under `generate_bass` renders `gen_bass_ducked.wav` while preserving `gen_bass.wav`.
-* Bass ducking key source priority: `gen_sidechain_trigger.wav` (if exported), else cleaned drum audio.
-* `phase_align.enabled: true` turns on pair-wise time alignment and writes `generated/phase_alignment_report.json`.
-* `pair_kick_bass`, `pair_snare_overheads`, and `pair_bass_guitars` are independent toggles.
-* Secondary-pair alignment uses optional `stems.overheads` and `stems.guitars` keywords if provided.
-* Soundfonts are defined globally under `soundfonts`, not per-step.
-* Any pipeline step set to `enabled: false` is skipped entirely.
-* Stems are discovered via partial filename matching (case-insensitive).
-* Missing optional sections are defaulted safely (`stems`, `soundfonts`, `pipeline`).
+## Configuration Notes
 
----
+Every song folder needs a `song_config.yaml` file. If it is missing, `bandleader` prints an example config and exits.
 
-# Using the Orchestrator
+Important config ideas:
 
-```bash
-bandleader ./MySong
-bandleader ./MySong --verbose
-```
+- `song.bpm` should match the source track tempo.
+- `song.progression` drives generated MIDI bass and arpeggio layers.
+- `stems` values are filename keywords, not full paths.
+- `soundfonts` values can be absolute paths or paths relative to the song folder.
+- Any pipeline step with `enabled: false` is skipped.
+- Missing optional sections are defaulted safely where possible.
 
-All outputs are written to:
+### Pipeline Steps
 
-```
-MySong/generated/
-```
+`clean_drums`
 
----
+Re-synthesizes the drum stem from detected hits. With `use_madmom: false`, Bandleader uses the default librosa-based fallback. With `use_madmom: true`, it uses the optional neural-net detector.
 
-# Individual Commands
+`clean_vocals`
 
-You can run tools independently.
+Applies conservative stem cleanup. If `normalize: true`, Bandleader applies FFmpeg loudness normalization using `target_lufs`, `target_true_peak`, and `target_lra`.
 
----
+`generate_bass`
 
-## Drum Cleaner
+Creates a deterministic MIDI bassline from the chord progression, renders it through FluidSynth, and can optionally create a sidechain-ducked version.
 
-Replaces muddy AI drums with clean soundfont drums while preserving timing.
+`generate_arp`
+
+Creates a deterministic arpeggio or pad layer from the chord progression.
+
+`phase_align`
+
+Applies bounded pair-wise timing alignment and writes a report to `generated/phase_alignment_report.json`.
+
+`clean_synth`
+
+Pitch-tracks and re-synthesizes monophonic synth or lead material. This is best for single-note lines, not chords or pads.
+
+## Individual Commands
+
+You can also run tools independently.
+
+### Drum Cleaner
 
 ```bash
 bandleader-drums drums.wav \
@@ -244,16 +252,7 @@ bandleader-drums drums.wav \
   --tempo 120
 ```
 
-Two detection modes:
-
-* `madmom` (neural net, best)
-* `basic` (librosa-based fallback)
-
----
-
-## Stem Cleaner
-
-Corrective EQ / compression via FFmpeg.
+### Stem Cleaner
 
 ```bash
 bandleader-stems vocals.wav \
@@ -263,13 +262,7 @@ bandleader-stems vocals.wav \
   --normalize
 ```
 
-Writes an FFmpeg audit file alongside output.
-
----
-
-## Synth Cleaner
-
-Pitch-tracks monophonic leads using pYIN and re-renders via MIDI.
+### Synth Cleaner
 
 ```bash
 bandleader-synth lead.wav \
@@ -277,23 +270,9 @@ bandleader-synth lead.wav \
   --preset lead
 ```
 
-Best for:
+Best for leads, plucks, and simple monophonic parts. Not recommended for chords, pads, or polyphonic material.
 
-* Leads
-* Plucks
-* Single-note bass
-
-Not for:
-
-* Chords
-* Pads
-* Polyphonic material
-
----
-
-## Bass Generator
-
-Harmonically conservative, root-based MIDI bass.
+### Bass Generator
 
 ```bash
 bandleader-bass \
@@ -302,18 +281,9 @@ bandleader-bass \
   --bpm 120
 ```
 
-Styles:
+Supported styles include `two_feel`, `four_on_floor`, `eighths`, and `disco`.
 
-* `two_feel`
-* `four_on_floor`
-* `eighths`
-* `disco`
-
----
-
-## Arp & Pad Generator
-
-Deterministic chord-tone arpeggios and gravity-based pad voice leading.
+### Arp and Pad Generator
 
 ```bash
 bandleader-arp \
@@ -323,85 +293,48 @@ bandleader-arp \
 
 Pad mode uses chord-set voice leading to minimize movement and avoid voice crossing.
 
----
-
-# Determinism Notes
+## Determinism
 
 `bandleader-bass` and `bandleader-arp` are deterministic when you pass an explicit `--seed`.
-Use the same progression, options, and seed to reproduce identical MIDI output between runs.
+
+Use the same progression, options, and seed to reproduce the same MIDI output between runs.
 
 Time-signature handling uses denominator-aware bar sizing:
 
-* `4/4` = 16 grid steps per bar
-* `3/4` = 12 grid steps per bar
-* `6/8` = 12 grid steps per bar
+- `4/4` = 16 grid steps per bar
+- `3/4` = 12 grid steps per bar
+- `6/8` = 12 grid steps per bar
 
----
+## Troubleshooting
 
-# Folder Structure
+`bandleader` command is missing:
 
-```
-MySong/
-  raw_stems/
-  song_config.yaml
-  generated/
-```
+Run `pip install -e .` from the repo root, or use `python -m pip install -e .`.
 
-All pipeline outputs land in `generated/`.
+FFmpeg or FluidSynth is missing:
 
----
+Install the system tool and confirm `ffmpeg -version` and `fluidsynth --version` work in the same terminal.
 
-# Dependencies
+Bandleader cannot find a stem:
 
-Installed automatically via `pip install -e .`.
+Check the `stems` keywords in `song_config.yaml`. A value such as `"drums"` matches filenames containing `drums`, case-insensitively.
 
-Core:
+A soundfont path fails:
 
-* numpy
-* scipy
-* librosa
-* mido
-* pydub
-* pyyaml
+Use an absolute `.sf2` path first. Once that works, you can switch to paths relative to the song folder.
 
-Optional:
+The synth cleaner sounds wrong:
 
-* madmom (drum transcription)
+Use it only on monophonic material. Polyphonic pads and chords are outside its intended scope.
 
-System:
+## Project Docs
 
-* FFmpeg
-* FluidSynth
+- [Roadmap](docs/roadmap.md)
+- [Release checklist](docs/release-checklist.md)
+- [Development workboard](docs/workboard.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
----
+## License
 
-# Roadmap
-
-See `Roadmap.md` for planned enhancements, including:
-
-* Loudness normalization
-* Phase alignment
-* Groove quantization
-* Drum replacement
-* Section detection
-* Style transfer
-
----
-
-# Who This Is For
-
-* Producers using Suno or Udio
-* DAW users who want cleaner stems
-* Songwriters who want deterministic MIDI layers
-* Developers interested in rule-based music tooling
-
----
-
-# License
-
-MIT — free to use and modify.
-
-See also:
-1. [CONTRIBUTING.md](CONTRIBUTING.md)
-2. [CHANGELOG.md](CHANGELOG.md)
-3. [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+MIT. See [LICENSE](LICENSE).
