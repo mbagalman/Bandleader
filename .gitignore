@@ -46,6 +46,3 @@ song_config.yaml
 *.swo
 # Local Codex metadata
 .claude/
-
-# Local Codex metadata
-.claude/
