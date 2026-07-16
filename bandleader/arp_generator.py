@@ -26,6 +26,7 @@ import mido
 
 from bandleader.chord_parser import parse_progression, pc_to_midi, triad_pcs
 from bandleader.cli_args import float_in_range, int_in_range, positive_int
+from bandleader.utils import TimeSignature
 
 log = logging.getLogger(__name__)
 
@@ -34,37 +35,20 @@ log = logging.getLogger(__name__)
 # Data Models
 # -----------------------------
 
-@dataclass(frozen=True)
-class TimeSignature:
-    """Time signature representation (e.g., 4/4, 3/4, 6/8)."""
-    numerator: int
-    denominator: int = 4
-
-    @property
-    def beats_per_bar(self) -> float:
-        """Quarter-note beats per bar."""
-        if self.numerator <= 0 or self.denominator <= 0:
-            raise ValueError("Time signature values must be positive.")
-        return self.numerator * (4.0 / self.denominator)
-
-    @property
-    def steps_per_bar(self) -> int:
-        """16th-note steps per bar."""
-        return max(1, int(round(self.numerator * 16.0 / self.denominator)))
-
 
 @dataclass
 class ArpStyle:
     """Style configuration for arpeggiator/pad generation."""
+
     pattern_16: Tuple[int, ...]  # 16th-note pattern (1=hit, 0=rest)
     pattern_name: str = "eighths"  # Rhythm/pattern name (e.g., eighths, alberti)
-    gate: float = 0.85            # Note duration as fraction of grid step
-    vel_base: int = 75            # Base velocity
-    vel_accent: int = 95          # Accented beat velocity
-    vel_jitter: int = 5           # Random velocity variation
-    motion: str = "up"            # Arp direction: up, down, updown, random
-    include_octave: bool = True   # Whether to include upper octave in arp
-    pad_legato: float = 0.95      # Pad note duration factor (0.95 = slight gap)
+    gate: float = 0.85  # Note duration as fraction of grid step
+    vel_base: int = 75  # Base velocity
+    vel_accent: int = 95  # Accented beat velocity
+    vel_jitter: int = 5  # Random velocity variation
+    motion: str = "up"  # Arp direction: up, down, updown, random
+    include_octave: bool = True  # Whether to include upper octave in arp
+    pad_legato: float = 0.95  # Pad note duration factor (0.95 = slight gap)
 
 
 # -----------------------------
@@ -78,9 +62,27 @@ PATTERNS_16 = {
     "sixteenths": (1,) * 16,
     "syncop": (1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0),
     "pop_arp": (1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0),
-    "alberti": (1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0),  # Will use special alberti logic
+    "alberti": (
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+    ),  # Will use special alberti logic
     "broken": (1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0),
-    "random_no_repeat": (1,) * 16,  # Use random picking logic; pattern indicates "grid is active"
+    "random_no_repeat": (1,)
+    * 16,  # Use random picking logic; pattern indicates "grid is active"
 }
 
 
@@ -88,7 +90,9 @@ def pattern_for_style(name: str) -> Tuple[int, ...]:
     """Return 16-step pattern for a given style name."""
     key = (name or "").strip().lower()
     if key not in PATTERNS_16:
-        raise ValueError(f"Unknown style pattern: {name!r}. Choices: {sorted(PATTERNS_16.keys())}")
+        raise ValueError(
+            f"Unknown style pattern: {name!r}. Choices: {sorted(PATTERNS_16.keys())}"
+        )
     return PATTERNS_16[key]
 
 
@@ -96,7 +100,10 @@ def pattern_for_style(name: str) -> Tuple[int, ...]:
 # Music Helpers
 # -----------------------------
 
-def voice_lead_chord(prev_notes: List[int], chord_pcs: List[int], *, center: int) -> List[int]:
+
+def voice_lead_chord(
+    prev_notes: List[int], chord_pcs: List[int], *, center: int
+) -> List[int]:
     """
     Voice-lead a chord (set of pitch classes) by selecting MIDI notes near previous chord notes
     and near a center key. This keeps pads smooth.
@@ -159,14 +166,18 @@ def voice_lead_chord(prev_notes: List[int], chord_pcs: List[int], *, center: int
     return sorted(chosen)
 
 
-def resolve_bar_chords(progression: List[List[Tuple[int, str]]], bar_idx: int) -> List[Tuple[int, str]]:
+def resolve_bar_chords(
+    progression: List[List[Tuple[int, str]]], bar_idx: int
+) -> List[Tuple[int, str]]:
     """Return chord list for a given bar index, repeating progression as needed."""
     if not progression:
         return [(0, "maj")]
     return progression[bar_idx % len(progression)]
 
 
-def compute_pad_segments(bar_chords: List[Tuple[int, str]], steps_per_bar: int) -> List[Tuple[int, str, int, int]]:
+def compute_pad_segments(
+    bar_chords: List[Tuple[int, str]], steps_per_bar: int
+) -> List[Tuple[int, str, int, int]]:
     """
     Compute non-overlapping pad segments that fully cover the bar.
     Returns tuples: (root_pc, qual, start_step, seg_len_steps)
@@ -196,11 +207,13 @@ def compute_pad_segments(bar_chords: List[Tuple[int, str]], steps_per_bar: int) 
     return segments
 
 
-def chord_for_step(bar_chords: List[Tuple[int, str]], step: int, steps_per_bar: int) -> Tuple[int, str]:
+def chord_for_step(
+    bar_chords: List[Tuple[int, str]], step: int, steps_per_bar: int
+) -> Tuple[int, str]:
     """Choose chord for a particular grid step within the bar, based on number of chords in bar."""
     n = max(1, len(bar_chords))
     steps_per_chord = max(1, steps_per_bar // n)
-    idx = (step // steps_per_chord)
+    idx = step // steps_per_chord
     idx = min(idx, n - 1)
     return bar_chords[idx]
 
@@ -284,6 +297,7 @@ def pick_next_degree(
 # Event Generation
 # -----------------------------
 
+
 def generate_events(
     progression: List[List[Tuple[int, str]]],
     *,
@@ -323,7 +337,7 @@ def generate_events(
     rng = random.Random(seed)
 
     # Dynamic Grid based on Time Signature
-    # 16th notes = 4 steps per beat. This ensures that regardless of time signature, 
+    # 16th notes = 4 steps per beat. This ensures that regardless of time signature,
     # the temporal scaling is identical to standard 4/4 BPM.
     steps_per_beat = 4
     beats_per_bar = ts.beats_per_bar
@@ -345,9 +359,13 @@ def generate_events(
 
         # PAD MODE: one chord per segment, voice-led, long notes
         if mode == "pad":
-            for root_pc, qual, start_step, seg_len_steps in compute_pad_segments(bar_chords, steps_per_bar):
+            for root_pc, qual, start_step, seg_len_steps in compute_pad_segments(
+                bar_chords, steps_per_bar
+            ):
                 chord_pcs = triad_pcs(root_pc, qual)
-                pad_notes = voice_lead_chord(prev_pad_notes, chord_pcs, center=center_key)
+                pad_notes = voice_lead_chord(
+                    prev_pad_notes, chord_pcs, center=center_key
+                )
 
                 t = (bar * beats_per_bar) + (start_step * beats_per_step)
 
@@ -382,7 +400,7 @@ def generate_events(
             cycle = build_arp_cycle(
                 triad,
                 include_octave=style.include_octave,
-                style=str(style.pattern_name)
+                style=str(style.pattern_name),
             )
 
             # Pick next note in cycle (by index, so octave placement follows
@@ -437,6 +455,7 @@ def generate_events(
 # MIDI Writing
 # -----------------------------
 
+
 def write_midi(
     events: List[Tuple[float, int, int, float, int]],
     *,
@@ -456,7 +475,9 @@ def write_midi(
     track.append(mido.MetaMessage("set_tempo", tempo=tempo, time=0))
 
     # Program change
-    track.append(mido.Message("program_change", program=program, channel=channel, time=0))
+    track.append(
+        mido.Message("program_change", program=program, channel=channel, time=0)
+    )
 
     # Convert beats to ticks
     ticks_per_beat = mid.ticks_per_beat
@@ -471,8 +492,20 @@ def write_midi(
         # before its own note_on and leave the note stuck on.
         off_tick = max(off_tick, on_tick + 1)
 
-        messages.append((on_tick, 1, mido.Message("note_on", note=note, velocity=vel, channel=ch, time=0)))
-        messages.append((off_tick, 0, mido.Message("note_off", note=note, velocity=0, channel=ch, time=0)))
+        messages.append(
+            (
+                on_tick,
+                1,
+                mido.Message("note_on", note=note, velocity=vel, channel=ch, time=0),
+            )
+        )
+        messages.append(
+            (
+                off_tick,
+                0,
+                mido.Message("note_off", note=note, velocity=0, channel=ch, time=0),
+            )
+        )
 
     # Sort by tick then by type (off before on at same tick? we use priority)
     messages.sort(key=lambda x: (x[0], x[1]))
@@ -492,82 +525,146 @@ def write_midi(
 # CLI
 # -----------------------------
 
+
 def main() -> None:
     """Main entry point for CLI."""
-    p = argparse.ArgumentParser(
-        description="Rule-based arpeggiator/pad generator"
-    )
+    p = argparse.ArgumentParser(description="Rule-based arpeggiator/pad generator")
 
     # Required
-    p.add_argument("--progression", required=True,
-                   help='Chord progression, e.g., "Am | F | C | G"')
+    p.add_argument(
+        "--progression", required=True, help='Chord progression, e.g., "Am | F | C | G"'
+    )
 
     # Output options
-    p.add_argument("--bars", type=positive_int, default=32,
-                   help="Total bars to generate (default: 32)")
-    p.add_argument("--bpm", type=float_in_range(4.0, 1000.0), default=120.0,
-                   help="Tempo in BPM, 4-1000 (default: 120; MIDI cannot encode tempos below ~4 BPM)")
-    p.add_argument("--time-signature", default="4/4",
-                   help="Time signature, e.g., '4/4' or '3/4' (default: 4/4)")
-    p.add_argument("--out", default="layer.mid",
-                   help="Output MIDI file (default: layer.mid)")
+    p.add_argument(
+        "--bars",
+        type=positive_int,
+        default=32,
+        help="Total bars to generate (default: 32)",
+    )
+    p.add_argument(
+        "--bpm",
+        type=float_in_range(4.0, 1000.0),
+        default=120.0,
+        help="Tempo in BPM, 4-1000 (default: 120; MIDI cannot encode tempos below ~4 BPM)",
+    )
+    p.add_argument(
+        "--time-signature",
+        default="4/4",
+        help="Time signature, e.g., '4/4' or '3/4' (default: 4/4)",
+    )
+    p.add_argument(
+        "--out", default="layer.mid", help="Output MIDI file (default: layer.mid)"
+    )
 
     # Mode and style
-    p.add_argument("--mode", choices=["arp", "pad"], default="arp",
-                   help="Generation mode (default: arp)")
-    p.add_argument("--style",
-                   choices=["eighths", "sixteenths", "syncop", "pop_arp",
-                            "alberti", "broken", "random_no_repeat"],
-                   default="eighths",
-                   help="Rhythm pattern (default: eighths)")
-    p.add_argument("--motion",
-                   choices=["up", "down", "updown", "random", "random_no_repeat"],
-                   default="updown",
-                   help="Arp direction (default: updown)")
+    p.add_argument(
+        "--mode",
+        choices=["arp", "pad"],
+        default="arp",
+        help="Generation mode (default: arp)",
+    )
+    p.add_argument(
+        "--style",
+        choices=[
+            "eighths",
+            "sixteenths",
+            "syncop",
+            "pop_arp",
+            "alberti",
+            "broken",
+            "random_no_repeat",
+        ],
+        default="eighths",
+        help="Rhythm pattern (default: eighths)",
+    )
+    p.add_argument(
+        "--motion",
+        choices=["up", "down", "updown", "random", "random_no_repeat"],
+        default="updown",
+        help="Arp direction (default: updown)",
+    )
 
     # Variation
-    p.add_argument("--seed", type=int, default=None,
-                   help="Random seed for reproducibility")
+    p.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility"
+    )
 
     # MIDI options
-    p.add_argument("--program", type=int_in_range(0, 127), default=81,
-                   help="MIDI program number 0-127 (default: 81 = Lead 2 Sawtooth)")
-    p.add_argument("--channel", type=int_in_range(0, 15), default=0,
-                   help="MIDI channel 0-15 (default: 0)")
+    p.add_argument(
+        "--program",
+        type=int_in_range(0, 127),
+        default=81,
+        help="MIDI program number 0-127 (default: 81 = Lead 2 Sawtooth)",
+    )
+    p.add_argument(
+        "--channel",
+        type=int_in_range(0, 15),
+        default=0,
+        help="MIDI channel 0-15 (default: 0)",
+    )
 
     # Voicing options
-    p.add_argument("--octave", type=int_in_range(0, 8), default=4,
-                   help="Base octave for arp mode 0-8 (default: 4 = around C4)")
-    p.add_argument("--center-key", type=int_in_range(0, 127), default=60,
-                   help="Center key for pad voicing 0-127 (default: 60=C4)")
-    p.add_argument("--no-octave", action="store_true",
-                   help="Disable upper octave extension for arp")
+    p.add_argument(
+        "--octave",
+        type=int_in_range(0, 8),
+        default=4,
+        help="Base octave for arp mode 0-8 (default: 4 = around C4)",
+    )
+    p.add_argument(
+        "--center-key",
+        type=int_in_range(0, 127),
+        default=60,
+        help="Center key for pad voicing 0-127 (default: 60=C4)",
+    )
+    p.add_argument(
+        "--no-octave",
+        action="store_true",
+        help="Disable upper octave extension for arp",
+    )
 
     # Note shaping
-    p.add_argument("--gate", type=float_in_range(0.0, 1.0), default=0.85,
-                   help="Note duration as fraction of grid step, arp mode only (default: 0.85)")
-    p.add_argument("--pad-legato", type=float_in_range(0.0, 1.0), default=0.95,
-                   help="Pad note duration factor (default: 0.95)")
+    p.add_argument(
+        "--gate",
+        type=float_in_range(0.0, 1.0),
+        default=0.85,
+        help="Note duration as fraction of grid step, arp mode only (default: 0.85)",
+    )
+    p.add_argument(
+        "--pad-legato",
+        type=float_in_range(0.0, 1.0),
+        default=0.95,
+        help="Pad note duration factor (default: 0.95)",
+    )
 
     # Velocity shaping
-    p.add_argument("--vel-base", type=int_in_range(1, 127), default=75,
-                   help="Base velocity 1-127 (default: 75)")
-    p.add_argument("--vel-accent", type=int_in_range(1, 127), default=95,
-                   help="Accent velocity on downbeats 1-127 (default: 95)")
-    p.add_argument("--vel-jitter", type=int_in_range(0, 126), default=5,
-                   help="Velocity jitter range (+/-) 0-126 (default: 5)")
+    p.add_argument(
+        "--vel-base",
+        type=int_in_range(1, 127),
+        default=75,
+        help="Base velocity 1-127 (default: 75)",
+    )
+    p.add_argument(
+        "--vel-accent",
+        type=int_in_range(1, 127),
+        default=95,
+        help="Accent velocity on downbeats 1-127 (default: 95)",
+    )
+    p.add_argument(
+        "--vel-jitter",
+        type=int_in_range(0, 126),
+        default=5,
+        help="Velocity jitter range (+/-) 0-126 (default: 5)",
+    )
 
     # Logging
-    p.add_argument("--verbose", "-v", action="store_true",
-                   help="Enable debug logging")
+    p.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
 
     args = p.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     # Parse progression using shared parser
     try:
@@ -578,10 +675,12 @@ def main() -> None:
 
     # Parse time signature
     try:
-        ts_num, ts_den = map(int, args.time_signature.strip().split('/'))
+        ts_num, ts_den = map(int, args.time_signature.strip().split("/"))
         ts = TimeSignature(numerator=ts_num, denominator=ts_den)
     except ValueError:
-        log.error("Invalid time signature format. Use 'numerator/denominator' e.g. '4/4'")
+        log.error(
+            "Invalid time signature format. Use 'numerator/denominator' e.g. '4/4'"
+        )
         raise SystemExit(2)
 
     # Create style
@@ -595,7 +694,7 @@ def main() -> None:
             vel_accent=int(args.vel_accent),
             vel_jitter=int(args.vel_jitter),
             motion=args.motion,
-            pad_legato=float(args.pad_legato)
+            pad_legato=float(args.pad_legato),
         )
     else:
         # Arp mode: use selected pattern
@@ -609,7 +708,7 @@ def main() -> None:
             vel_jitter=int(args.vel_jitter),
             motion=args.motion,
             include_octave=not args.no_octave,
-            pad_legato=float(args.pad_legato)
+            pad_legato=float(args.pad_legato),
         )
 
     # Generate events

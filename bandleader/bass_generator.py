@@ -31,6 +31,7 @@ from bandleader.chord_parser import (
     triad_pcs,
 )
 from bandleader.cli_args import float_in_range, int_in_range, positive_int
+from bandleader.utils import TimeSignature
 
 log = logging.getLogger(__name__)
 
@@ -38,29 +39,6 @@ log = logging.getLogger(__name__)
 # -----------------------------
 # Pattern / Style
 # -----------------------------
-
-@dataclass(frozen=True)
-class TimeSignature:
-    numerator: int = 4
-    denominator: int = 4
-
-    @property
-    def beats_per_bar(self) -> float:
-        """
-        Quarter-note beats per bar.
-        Example: 4/4 -> 4.0, 3/4 -> 3.0, 6/8 -> 3.0
-        """
-        if self.numerator <= 0 or self.denominator <= 0:
-            raise ValueError("Time signature values must be positive.")
-        return self.numerator * (4.0 / self.denominator)
-
-    @property
-    def steps_per_bar(self) -> int:
-        """
-        16th-note grid steps per bar, rounded to nearest integer.
-        Example: 4/4 -> 16, 3/4 -> 12, 6/8 -> 12.
-        """
-        return max(1, int(round(self.numerator * 16.0 / self.denominator)))
 
 
 @dataclass
@@ -79,8 +57,11 @@ class BassStyle:
 # Generator
 # -----------------------------
 
+
 def generate_bass_events(
-    progression: List[List[Tuple[int, str]]],  # List of bars, each bar is list of (Root, Quality)
+    progression: List[
+        List[Tuple[int, str]]
+    ],  # List of bars, each bar is list of (Root, Quality)
     *,
     total_bars: int,
     ts: TimeSignature,
@@ -90,7 +71,7 @@ def generate_bass_events(
     approach_prob_per_bar: float = 0.06,
     approach_mode: str = "safe",
 ) -> List[Tuple[float, int, int, float]]:
-    
+
     rng = random.Random(seed)
     beats_per_bar = ts.beats_per_bar
     steps_per_beat = 4
@@ -110,7 +91,7 @@ def generate_bass_events(
     def choose_note(root: int, qual: str) -> int:
         """Choose note based on chord quality (Root, 5th, Octave)."""
         pc = root
-        
+
         # Decide whether to play root or 5th
         if rng.random() < style.fifth_prob:
             # Calculate the correct 5th for this quality
@@ -119,8 +100,8 @@ def generate_bass_events(
             if len(intervals) >= 3:
                 pc = intervals[2]  # The 5th
             else:
-                pc = (root + 7) % 12 # Fallback
-        
+                pc = (root + 7) % 12  # Fallback
+
         note = pc_to_midi(pc, base_octave)
 
         if rng.random() < style.octave_up_prob:
@@ -137,7 +118,7 @@ def generate_bass_events(
         # 1. Active Steps from Pattern
         active_steps: List[int] = []
         pat_len = len(style.pattern_16)
-        
+
         for step in range(steps_per_bar):
             # Wrap safely for time signatures where steps_per_bar != 16
             if style.pattern_16[step % pat_len] != 1:
@@ -164,7 +145,7 @@ def generate_bass_events(
         # 4. Generate Events
         for i, step in enumerate(active_steps):
             time_beats = bar_start_beats + (step / steps_per_beat)
-            
+
             # Identify current chord
             root_pc, quality = get_chord_for_step(bar, step)
 
@@ -180,9 +161,13 @@ def generate_bass_events(
                 else:
                     # Safe pickup: The 5th of the NEXT chord
                     target_intervals = triad_pcs(target_root, target_qual)
-                    approach_pc = target_intervals[2] if len(target_intervals) >= 3 else (target_root + 7) % 12
+                    approach_pc = (
+                        target_intervals[2]
+                        if len(target_intervals) >= 3
+                        else (target_root + 7) % 12
+                    )
                     note = pc_to_midi(approach_pc, base_octave)
-                
+
                 note = clamp_int(note, 28, 55)
             else:
                 note = choose_note(root_pc, quality)
@@ -198,7 +183,7 @@ def generate_bass_events(
                 gap_steps = active_steps[i + 1] - step
             else:
                 gap_steps = steps_per_bar - step
-            
+
             raw_dur_beats = gap_steps / steps_per_beat
             dur_beats = max(raw_dur_beats * style.legato_factor, 0.10)
 
@@ -211,6 +196,7 @@ def generate_bass_events(
 # -----------------------------
 # MIDI Writing
 # -----------------------------
+
 
 def write_midi(events, out_path, bpm, program=34, channel=0, ticks_per_beat=960):
     out_path = Path(out_path)
@@ -226,8 +212,12 @@ def write_midi(events, out_path, bpm, program=34, channel=0, ticks_per_beat=960)
         t0 = int(round(t_beats * ticks_per_beat))
         t1 = int(round((t_beats + dur_beats) * ticks_per_beat))
         t1 = max(t1, t0 + 1)
-        msgs.append((t0, Message("note_on", note=note, velocity=vel, time=0, channel=channel)))
-        msgs.append((t1, Message("note_off", note=note, velocity=0, time=0, channel=channel)))
+        msgs.append(
+            (t0, Message("note_on", note=note, velocity=vel, time=0, channel=channel))
+        )
+        msgs.append(
+            (t1, Message("note_off", note=note, velocity=0, time=0, channel=channel))
+        )
 
     msgs.sort(key=lambda x: (x[0], 0 if x[1].type == "note_off" else 1))
 
@@ -245,53 +235,96 @@ def write_midi(events, out_path, bpm, program=34, channel=0, ticks_per_beat=960)
 # -----------------------------
 
 BASS_PATTERNS = {
-    "two_feel":      (1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0),
-    "four_on_floor": (1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0),
-    "eighths":       (1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0),
-    "disco":         (0,0,1,0, 1,0,1,0, 0,0,1,0, 1,0,1,0),
+    "two_feel": (1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0),
+    "four_on_floor": (1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0),
+    "eighths": (1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0),
+    "disco": (0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0),
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Rule-based bass generator")
-    parser.add_argument("--progression", required=True,
-                        help='Chord progression, e.g., "Am G | F | C/G"')
-    parser.add_argument("--bars", type=positive_int, default=32,
-                        help="Total bars to generate (default: 32)")
-    parser.add_argument("--bpm", type=float_in_range(4.0, 1000.0), default=120.0,
-                        help="Tempo in BPM, 4-1000 (default: 120; MIDI cannot encode tempos below ~4 BPM)")
-    parser.add_argument("--time-signature", default="4/4",
-                        help="Time signature, e.g., '4/4' or '3/4'")
-    parser.add_argument("--out", default="bass.mid",
-                        help="Output MIDI file (default: bass.mid)")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="Random seed for reproducible output")
-    parser.add_argument("--style", choices=sorted(BASS_PATTERNS), default="two_feel",
-                        help="Bass rhythm pattern (default: two_feel)")
-    parser.add_argument("--legato", type=float_in_range(0.0, 1.0), default=0.95,
-                        help="Note duration factor 0.0-1.0 (default: 0.95)")
-    parser.add_argument("--base-octave", type=int_in_range(0, 8), default=2,
-                        help="Base octave for bass notes 0-8 (default: 2)")
-    parser.add_argument("--program", type=int_in_range(0, 127), default=34,
-                        help="MIDI program number 0-127 (default: 34 = Electric Bass)")
-    parser.add_argument("--channel", type=int_in_range(0, 15), default=0,
-                        help="MIDI channel 0-15 (default: 0)")
-    parser.add_argument("--weak-prob", type=float_in_range(0.0, 1.0), default=0.15,
-                        help="Probability of an extra weak-beat hit per bar (default: 0.15)")
-    parser.add_argument("--approach-prob", type=float_in_range(0.0, 1.0), default=0.06,
-                        help="Probability of an approach note per bar (default: 0.06)")
-    parser.add_argument("--approach", choices=["safe", "chromatic"], default="safe",
-                        help="Approach-note style (default: safe)")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Enable debug output")
+    parser.add_argument(
+        "--progression", required=True, help='Chord progression, e.g., "Am G | F | C/G"'
+    )
+    parser.add_argument(
+        "--bars",
+        type=positive_int,
+        default=32,
+        help="Total bars to generate (default: 32)",
+    )
+    parser.add_argument(
+        "--bpm",
+        type=float_in_range(4.0, 1000.0),
+        default=120.0,
+        help="Tempo in BPM, 4-1000 (default: 120; MIDI cannot encode tempos below ~4 BPM)",
+    )
+    parser.add_argument(
+        "--time-signature", default="4/4", help="Time signature, e.g., '4/4' or '3/4'"
+    )
+    parser.add_argument(
+        "--out", default="bass.mid", help="Output MIDI file (default: bass.mid)"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducible output"
+    )
+    parser.add_argument(
+        "--style",
+        choices=sorted(BASS_PATTERNS),
+        default="two_feel",
+        help="Bass rhythm pattern (default: two_feel)",
+    )
+    parser.add_argument(
+        "--legato",
+        type=float_in_range(0.0, 1.0),
+        default=0.95,
+        help="Note duration factor 0.0-1.0 (default: 0.95)",
+    )
+    parser.add_argument(
+        "--base-octave",
+        type=int_in_range(0, 8),
+        default=2,
+        help="Base octave for bass notes 0-8 (default: 2)",
+    )
+    parser.add_argument(
+        "--program",
+        type=int_in_range(0, 127),
+        default=34,
+        help="MIDI program number 0-127 (default: 34 = Electric Bass)",
+    )
+    parser.add_argument(
+        "--channel",
+        type=int_in_range(0, 15),
+        default=0,
+        help="MIDI channel 0-15 (default: 0)",
+    )
+    parser.add_argument(
+        "--weak-prob",
+        type=float_in_range(0.0, 1.0),
+        default=0.15,
+        help="Probability of an extra weak-beat hit per bar (default: 0.15)",
+    )
+    parser.add_argument(
+        "--approach-prob",
+        type=float_in_range(0.0, 1.0),
+        default=0.06,
+        help="Probability of an approach note per bar (default: 0.06)",
+    )
+    parser.add_argument(
+        "--approach",
+        choices=["safe", "chromatic"],
+        default="safe",
+        help="Approach-note style (default: safe)",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
 
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     try:
         # UPDATED: Use the quality-aware parser
@@ -301,13 +334,15 @@ def main():
         sys.exit(1)
 
     try:
-        ts_num, ts_den = map(int, args.time_signature.strip().split('/'))
+        ts_num, ts_den = map(int, args.time_signature.strip().split("/"))
         ts = TimeSignature(numerator=ts_num, denominator=ts_den)
         if ts_num <= 0 or ts_den <= 0:
             raise ValueError("time signature values must be positive")
     except ValueError:
-        log.error("Invalid time signature %r. Use 'numerator/denominator' with positive integers, e.g. '4/4'.",
-                  args.time_signature)
+        log.error(
+            "Invalid time signature %r. Use 'numerator/denominator' with positive integers, e.g. '4/4'.",
+            args.time_signature,
+        )
         sys.exit(1)
 
     selected_pat = BASS_PATTERNS[args.style]
@@ -338,6 +373,7 @@ def main():
     )
 
     log.info("Generated: %s", args.out)
+
 
 if __name__ == "__main__":
     main()

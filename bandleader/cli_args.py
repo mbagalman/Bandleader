@@ -10,16 +10,20 @@ import argparse
 
 
 def positive_int(value: str) -> int:
+    """Validate that the given string represents a positive integer."""
     try:
         ivalue = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"expected an integer, got {value!r}") from None
+        raise argparse.ArgumentTypeError(
+            f"expected an integer, got {value!r}"
+        ) from None
     if ivalue <= 0:
         raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
     return ivalue
 
 
 def positive_float(value: str) -> float:
+    """Validate that the given string represents a positive float."""
     try:
         fvalue = float(value)
     except ValueError:
@@ -36,7 +40,9 @@ def int_in_range(lo: int, hi: int):
         try:
             ivalue = int(value)
         except ValueError:
-            raise argparse.ArgumentTypeError(f"expected an integer, got {value!r}") from None
+            raise argparse.ArgumentTypeError(
+                f"expected an integer, got {value!r}"
+            ) from None
         if not lo <= ivalue <= hi:
             raise argparse.ArgumentTypeError(f"must be in range {lo}-{hi}, got {value}")
         return ivalue
@@ -52,7 +58,9 @@ def float_in_range(lo: float, hi: float):
         try:
             fvalue = float(value)
         except ValueError:
-            raise argparse.ArgumentTypeError(f"expected a number, got {value!r}") from None
+            raise argparse.ArgumentTypeError(
+                f"expected a number, got {value!r}"
+            ) from None
         if not lo <= fvalue <= hi:
             raise argparse.ArgumentTypeError(f"must be in range {lo}-{hi}, got {value}")
         return fvalue

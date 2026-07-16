@@ -190,11 +190,20 @@ def get_input_info(path: Path) -> Optional[str]:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error", "-select_streams", "a:0",
-                "-show_entries", "stream=codec_name,sample_rate,channels,bit_rate",
-                "-of", "csv=p=0", str(path),
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name,sample_rate,channels,bit_rate",
+                "-of",
+                "csv=p=0",
+                str(path),
             ],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         parts = result.stdout.strip().split(",")
         if len(parts) >= 3:
@@ -204,9 +213,11 @@ def get_input_info(path: Path) -> Optional[str]:
             bit_rate = parts[3] if len(parts) > 3 and parts[3] else "unknown"
             ch_label = "mono" if channels == "1" else f"{channels}ch"
             br_label = f"{int(bit_rate)//1000}kbps" if bit_rate.isdigit() else ""
-            return f"{codec}, {sample_rate} Hz, {ch_label}" + (f", {br_label}" if br_label else "")
+            return f"{codec}, {sample_rate} Hz, {ch_label}" + (
+                f", {br_label}" if br_label else ""
+            )
         return result.stdout.strip() or None
-    except Exception:
+    except (RuntimeError, OSError, ValueError):
         return None
 
 
@@ -215,10 +226,12 @@ def ffmpeg_supports_filter(filter_name: str) -> bool:
     try:
         proc = subprocess.run(
             ["ffmpeg", "-hide_banner", "-filters"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return filter_name in proc.stdout
-    except Exception:
+    except (RuntimeError, OSError, ValueError):
         return False
 
 
@@ -271,7 +284,9 @@ def build_wet_chain(
 
     # Debug warnings for clamped values
     if abs(thresh_linear - raw_thresh_linear) > 1e-12:
-        log.debug("Comp threshold clamped %.4f -> %.4f", raw_thresh_linear, thresh_linear)
+        log.debug(
+            "Comp threshold clamped %.4f -> %.4f", raw_thresh_linear, thresh_linear
+        )
     if abs(makeup_linear - raw_makeup_linear) > 1e-12:
         log.debug("Comp makeup clamped %.3f -> %.3f", raw_makeup_linear, makeup_linear)
 
@@ -318,7 +333,9 @@ def build_final_filter(
     )
 
 
-def build_loudnorm_filter(*, target_lufs: float, target_true_peak: float, target_lra: float) -> str:
+def build_loudnorm_filter(
+    *, target_lufs: float, target_true_peak: float, target_lra: float
+) -> str:
     """Build a loudnorm filter string from explicit target parameters."""
     return f"loudnorm=I={float(target_lufs)}:TP={float(target_true_peak)}:LRA={float(target_lra)}"
 
@@ -349,11 +366,16 @@ def run_ffmpeg(
     cmd = ["ffmpeg"]
     cmd.append("-y" if overwrite else "-n")
     cmd += [
-        "-hide_banner", "-loglevel", "error",
-        "-i", str(input_path),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(input_path),
         "-vn",
-        "-af", audio_filter,
-        "-c:a", pcm_codec,
+        "-af",
+        audio_filter,
+        "-c:a",
+        pcm_codec,
     ]
 
     if sample_rate:
@@ -363,7 +385,7 @@ def run_ffmpeg(
     # parsed as an ffmpeg option (the output is a bare positional argument).
     cmd.append(str(Path(output_path).resolve()))
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if proc.returncode != 0:
         err = proc.stderr.strip() or "Unknown ffmpeg error"
         raise RuntimeError(err)
@@ -388,15 +410,19 @@ def main() -> None:
     """Console-script entry point: run with friendly fatal-error reporting."""
     try:
         _run_cli()
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.error("Error: %s", e)
         sys.exit(1)
 
 
 def _run_cli() -> None:
-    parser = argparse.ArgumentParser(description="Safe stem cleaner using ffmpeg with conservative presets.")
+    parser = argparse.ArgumentParser(
+        description="Safe stem cleaner using ffmpeg with conservative presets."
+    )
     parser.add_argument("input_file", help="Input audio file")
-    parser.add_argument("--stem", choices=["vocal", "guitar", "bass", "other"], default="other")
+    parser.add_argument(
+        "--stem", choices=["vocal", "guitar", "bass", "other"], default="other"
+    )
     parser.add_argument("--strength", choices=["low", "medium", "high"], default="low")
     parser.add_argument("--output", "-o", default=None)
     parser.add_argument("--overwrite", action="store_true")
@@ -407,17 +433,30 @@ def _run_cli() -> None:
 
     # Options
     parser.add_argument("--deess", action="store_true", help="Enable light de-essing")
-    parser.add_argument("--normalize", action="store_true", help="Enable loudness normalization")
-    parser.add_argument("--target-lufs", "--lufs", dest="target_lufs", type=float, default=-18.0)
-    parser.add_argument("--target-true-peak", "--true-peak", dest="target_true_peak", type=float, default=-1.5)
-    parser.add_argument("--target-lra", "--lra", dest="target_lra", type=float, default=11.0)
+    parser.add_argument(
+        "--normalize", action="store_true", help="Enable loudness normalization"
+    )
+    parser.add_argument(
+        "--target-lufs", "--lufs", dest="target_lufs", type=float, default=-18.0
+    )
+    parser.add_argument(
+        "--target-true-peak",
+        "--true-peak",
+        dest="target_true_peak",
+        type=float,
+        default=-1.5,
+    )
+    parser.add_argument(
+        "--target-lra", "--lra", dest="target_lra", type=float, default=11.0
+    )
 
     # Format
     parser.add_argument("--sample-rate", type=int, default=None)
     parser.add_argument("--bit-depth", type=int, default=24)
     parser.add_argument(
-        "--wav", action="store_true",
-        help="Force WAV output (ensures .wav extension even if --output specifies another extension)"
+        "--wav",
+        action="store_true",
+        help="Force WAV output (ensures .wav extension even if --output specifies another extension)",
     )
 
     # LPF
@@ -425,15 +464,15 @@ def _run_cli() -> None:
     lpf_group.add_argument("--no-lpf", action="store_true")
     lpf_group.add_argument("--force-lpf", action="store_true")
 
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug output")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
 
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     check_ffmpeg()
 
@@ -441,7 +480,11 @@ def _run_cli() -> None:
     if not input_path.exists():
         raise FileNotFoundError(f"Input not found: {input_path}")
 
-    output_path = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_clean.wav")
+    output_path = (
+        Path(args.output)
+        if args.output
+        else input_path.with_name(f"{input_path.stem}_clean.wav")
+    )
 
     # --wav flag: force .wav extension on output
     if args.wav:
@@ -455,7 +498,9 @@ def _run_cli() -> None:
         if args.stem != "vocal":
             log.info("--deess is usually only appropriate for vocals.")
         if ffmpeg_supports_filter("deesser") is False:
-            log.warning("`deesser` filter not found. If execution fails, try without --deess.")
+            log.warning(
+                "`deesser` filter not found. If execution fails, try without --deess."
+            )
 
     force_lpf = False if args.no_lpf else (True if args.force_lpf else None)
 
@@ -527,7 +572,9 @@ def _run_cli() -> None:
         )
     except RuntimeError as e:
         msg = str(e)
-        if enable_deess and ("deesser" in msg or "No such filter" in msg or "not found" in msg):
+        if enable_deess and (
+            "deesser" in msg or "No such filter" in msg or "not found" in msg
+        ):
             log.warning(
                 "FFmpeg failed with the deesser filter (likely missing from this "
                 "ffmpeg build). Retrying WITHOUT de-essing — output will not be "

@@ -39,12 +39,14 @@ log = logging.getLogger(__name__)
 # Optional: for audio file format conversion if needed
 try:
     from pydub import AudioSegment
+
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
 
 try:
     import librosa
+
     LIBROSA_AVAILABLE = True
 except ImportError:
     LIBROSA_AVAILABLE = False
@@ -52,15 +54,15 @@ except ImportError:
 
 # General MIDI drum note mapping (MIDI channel 10 -> channel index 9)
 DRUM_MAPPING = {
-    'kick': 36,        # Bass Drum 1
-    'snare': 38,       # Acoustic Snare
-    'closed_hat': 42,  # Closed Hi-Hat
-    'open_hat': 46,    # Open Hi-Hat
-    'low_tom': 45,     # Low Tom
-    'mid_tom': 47,     # Mid Tom
-    'high_tom': 50,    # High Tom
-    'crash': 49,       # Crash Cymbal 1
-    'ride': 51,        # Ride Cymbal 1
+    "kick": 36,  # Bass Drum 1
+    "snare": 38,  # Acoustic Snare
+    "closed_hat": 42,  # Closed Hi-Hat
+    "open_hat": 46,  # Open Hi-Hat
+    "low_tom": 45,  # Low Tom
+    "mid_tom": 47,  # Mid Tom
+    "high_tom": 50,  # High Tom
+    "crash": 49,  # Crash Cymbal 1
+    "ride": 51,  # Ride Cymbal 1
 }
 
 
@@ -73,14 +75,15 @@ def convert_to_wav(input_file: str) -> tuple[str, bool]:
     """
     input_path = Path(input_file)
 
-    if input_path.suffix.lower() == '.wav':
+    if input_path.suffix.lower() == ".wav":
         return str(input_file), False
 
     if not PYDUB_AVAILABLE:
         log.warning(
             "Cannot convert %s to WAV without pydub. "
             "Proceeding with original file: %s",
-            input_path.suffix, input_file
+            input_path.suffix,
+            input_file,
         )
         return str(input_file), False
 
@@ -92,7 +95,7 @@ def convert_to_wav(input_file: str) -> tuple[str, bool]:
         prefix=f"{input_path.stem}_", suffix=".temp.wav", dir=str(input_path.parent)
     )
     os.close(fd)
-    audio.export(tmp_name, format='wav')
+    audio.export(tmp_name, format="wav")
     log.info("Converted to %s", tmp_name)
     return tmp_name, True
 
@@ -103,7 +106,9 @@ def estimate_tempo_bpm(audio_file: str) -> float:
     Returns a float BPM.
     """
     if not LIBROSA_AVAILABLE:
-        raise ImportError("librosa is required for tempo estimation. Install with: pip install librosa")
+        raise ImportError(
+            "librosa is required for tempo estimation. Install with: pip install librosa"
+        )
 
     y, sr = librosa.load(audio_file, sr=None)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
@@ -142,13 +147,15 @@ def tempo_sanity_check(user_bpm: float, estimated_bpm: float) -> None:
             "Estimated tempo (~%.1f BPM) differs from your --tempo (%.1f BPM) by ~2x.\n"
             "Beat trackers often return half/double-time on drum-heavy audio.\n"
             "Using your provided BPM for MIDI timing/playback.",
-            estimated_bpm, user_bpm
+            estimated_bpm,
+            user_bpm,
         )
     elif very_different:
         log.warning(
             "Estimated tempo (~%.1f BPM) differs substantially from your --tempo (%.1f BPM).\n"
             "Using your provided BPM for MIDI timing/playback.",
-            estimated_bpm, user_bpm
+            estimated_bpm,
+            user_bpm,
         )
 
 
@@ -165,17 +172,19 @@ def choose_tempo_bpm(audio_file: str, user_bpm: float | None) -> float:
             try:
                 est = estimate_tempo_bpm(audio_file)
                 tempo_sanity_check(float(user_bpm), est)
-            except Exception as e:
+            except (RuntimeError, OSError, ValueError) as e:
                 log.warning("Tempo sanity check skipped: %s", e)
         return float(user_bpm)
 
     if not LIBROSA_AVAILABLE:
-        log.warning("librosa not available for tempo estimation; defaulting to 120 BPM.")
+        log.warning(
+            "librosa not available for tempo estimation; defaulting to 120 BPM."
+        )
         return 120.0
 
     try:
         est = estimate_tempo_bpm(audio_file)
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.warning("Tempo estimation failed (%s); defaulting to 120 BPM.", e)
         return 120.0
 
@@ -196,7 +205,9 @@ def transcribe_drums_basic(audio_file: str):
     Returns: list of (time_seconds, drum_name, velocity_int)
     """
     if not LIBROSA_AVAILABLE:
-        raise ImportError("librosa is required for basic transcription. Install with: pip install librosa")
+        raise ImportError(
+            "librosa is required for basic transcription. Install with: pip install librosa"
+        )
 
     log.info("Using basic onset detection on %s...", audio_file)
 
@@ -215,10 +226,12 @@ def transcribe_drums_basic(audio_file: str):
         pre_avg=1,
         post_avg=1,
         pre_max=1,
-        post_max=1
+        post_max=1,
     )
     onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop_length)
-    onset_env = librosa.onset.onset_strength(y=y_percussive, sr=sr, hop_length=hop_length)
+    onset_env = librosa.onset.onset_strength(
+        y=y_percussive, sr=sr, hop_length=hop_length
+    )
 
     drum_events = []
 
@@ -233,14 +246,16 @@ def transcribe_drums_basic(audio_file: str):
         if len(window) == 0:
             continue
 
-        spectral_centroid = float(librosa.feature.spectral_centroid(y=window, sr=sr)[0, 0])
+        spectral_centroid = float(
+            librosa.feature.spectral_centroid(y=window, sr=sr)[0, 0]
+        )
 
         if spectral_centroid < 500:
-            drum_type = 'kick'
+            drum_type = "kick"
         elif spectral_centroid < 3000:
-            drum_type = 'snare'
+            drum_type = "snare"
         else:
-            drum_type = 'closed_hat'
+            drum_type = "closed_hat"
 
         env_val = float(onset_env[onset_frame]) if onset_frame < len(onset_env) else 0.0
         velocity = int(min(127, env_val * 20))
@@ -265,7 +280,7 @@ def create_midi(drum_events, output_file: str, tempo_bpm: float) -> str:
     mid.tracks.append(track)
 
     tempo_value = mido.bpm2tempo(float(tempo_bpm))
-    track.append(MetaMessage('set_tempo', tempo=tempo_value, time=0))
+    track.append(MetaMessage("set_tempo", tempo=tempo_value, time=0))
 
     # Sort by time
     drum_events.sort(key=lambda x: x[0])
@@ -280,10 +295,18 @@ def create_midi(drum_events, output_file: str, tempo_bpm: float) -> str:
         delta_ticks = int(round((time_sec - last_time_sec) * ticks_per_second))
         delta_ticks = max(0, delta_ticks)
 
-        note = DRUM_MAPPING.get(drum_type, DRUM_MAPPING['snare'])
+        note = DRUM_MAPPING.get(drum_type, DRUM_MAPPING["snare"])
 
-        track.append(Message('note_on', note=note, velocity=int(velocity), time=delta_ticks, channel=9))
-        track.append(Message('note_off', note=note, velocity=0, time=0, channel=9))
+        track.append(
+            Message(
+                "note_on",
+                note=note,
+                velocity=int(velocity),
+                time=delta_ticks,
+                channel=9,
+            )
+        )
+        track.append(Message("note_off", note=note, velocity=0, time=0, channel=9))
 
         last_time_sec = time_sec
 
@@ -292,31 +315,38 @@ def create_midi(drum_events, output_file: str, tempo_bpm: float) -> str:
     return output_file
 
 
-def render_midi_with_fluidsynth(midi_file: str, soundfont: str, output_file: str, gain: float = 0.5) -> str:
+def render_midi_with_fluidsynth(
+    midi_file: str, soundfont: str, output_file: str, gain: float = 0.5
+) -> str:
     """
     Render MIDI file to audio using FluidSynth.
     """
     log.info("Rendering MIDI with FluidSynth...")
 
     try:
-        subprocess.run(['fluidsynth', '--version'], capture_output=True, check=True)
+        subprocess.run(["fluidsynth", "--version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        raise RuntimeError("FluidSynth not found. Please install it and ensure it's on your PATH.")
+        raise RuntimeError(
+            "FluidSynth not found. Please install it and ensure it's on your PATH."
+        ) from exc
 
     if not os.path.exists(soundfont):
         raise FileNotFoundError(f"Soundfont not found: {soundfont}")
 
     cmd = [
-        'fluidsynth',
-        '-ni',
-        '-g', str(gain),
-        '-T', 'wav',
-        '-F', output_file,
+        "fluidsynth",
+        "-ni",
+        "-g",
+        str(gain),
+        "-T",
+        "wav",
+        "-F",
+        output_file,
         soundfont,
-        midi_file
+        midi_file,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
     if result.returncode != 0:
         log.error("FluidSynth stderr: %s", result.stderr)
@@ -327,22 +357,37 @@ def render_midi_with_fluidsynth(midi_file: str, soundfont: str, output_file: str
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Clean fuzzy drum tracks by transcribing + re-synthesizing.')
-    parser.add_argument('input_file', help='Input audio file (WAV/MP3/etc.)')
-    parser.add_argument('--soundfont', '-s', required=True, help='Path to .sf2 soundfont')
-    parser.add_argument('--output', '-o', help='Output audio file (default: <input>_clean.wav)')
-    parser.add_argument('--midi-output', '-m', help='Save MIDI file path (default: <input>.mid)')
-    parser.add_argument('--tempo', '-t', type=float, default=None,
-                        help='Tempo in BPM. Strongly recommended if known (better alignment + playback speed).')
-    parser.add_argument('--gain', '-g', type=float, default=0.5, help='Output gain 0.0-1.0')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug output')
+    parser = argparse.ArgumentParser(
+        description="Clean fuzzy drum tracks by transcribing + re-synthesizing."
+    )
+    parser.add_argument("input_file", help="Input audio file (WAV/MP3/etc.)")
+    parser.add_argument(
+        "--soundfont", "-s", required=True, help="Path to .sf2 soundfont"
+    )
+    parser.add_argument(
+        "--output", "-o", help="Output audio file (default: <input>_clean.wav)"
+    )
+    parser.add_argument(
+        "--midi-output", "-m", help="Save MIDI file path (default: <input>.mid)"
+    )
+    parser.add_argument(
+        "--tempo",
+        "-t",
+        type=float,
+        default=None,
+        help="Tempo in BPM. Strongly recommended if known (better alignment + playback speed).",
+    )
+    parser.add_argument(
+        "--gain", "-g", type=float, default=0.5, help="Output gain 0.0-1.0"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     # Emit availability warnings now that logging is set up
     if not PYDUB_AVAILABLE:
@@ -352,8 +397,14 @@ def main():
     if not input_path.exists():
         log.error("Input file not found: %s", input_path)
         sys.exit(1)
-    output_path = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_clean.wav")
-    midi_path = Path(args.midi_output) if args.midi_output else input_path.with_suffix('.mid')
+    output_path = (
+        Path(args.output)
+        if args.output
+        else input_path.with_name(f"{input_path.stem}_clean.wav")
+    )
+    midi_path = (
+        Path(args.midi_output) if args.midi_output else input_path.with_suffix(".mid")
+    )
 
     wav_file = None
     created_temp = False
@@ -373,7 +424,9 @@ def main():
             sys.exit(1)
 
         create_midi(drum_events, str(midi_path), tempo_bpm=tempo_bpm)
-        render_midi_with_fluidsynth(str(midi_path), args.soundfont, str(output_path), gain=args.gain)
+        render_midi_with_fluidsynth(
+            str(midi_path), args.soundfont, str(output_path), gain=args.gain
+        )
 
         log.info("=" * 50)
         log.info("SUCCESS!")
@@ -381,10 +434,11 @@ def main():
         log.info("MIDI saved to: %s", midi_path)
         log.info("=" * 50)
 
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.error("Error: %s", e)
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 
@@ -397,5 +451,5 @@ def main():
                 log.warning("Could not remove temp file: %s", e)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

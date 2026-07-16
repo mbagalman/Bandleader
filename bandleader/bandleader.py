@@ -121,7 +121,15 @@ OPTIONAL_STEM_DEFAULTS = {"overheads": "overheads", "guitars": "guitars"}
 SOUNDFONT_KEYS = {"drums", "bass", "arp", "synth"}
 
 BASS_STYLES = {"two_feel", "four_on_floor", "eighths", "disco"}
-ARP_STYLES = {"eighths", "sixteenths", "syncop", "pop_arp", "alberti", "broken", "random_no_repeat"}
+ARP_STYLES = {
+    "eighths",
+    "sixteenths",
+    "syncop",
+    "pop_arp",
+    "alberti",
+    "broken",
+    "random_no_repeat",
+}
 ARP_MOTIONS = {"up", "down", "updown", "random", "random_no_repeat"}
 TIME_SIGNATURE_RE = re.compile(r"^\s*(\d+)\s*/\s*(\d+)\s*$")
 
@@ -189,13 +197,23 @@ def validate_config(config: dict) -> dict:
         add_error("song.bpm", f"must be a positive number, got {song['bpm']!r}.")
 
     if "progression" not in song:
-        add_error("song.progression", 'is required and must be a non-empty string (e.g. "Am G | F | C").')
+        add_error(
+            "song.progression",
+            'is required and must be a non-empty string (e.g. "Am G | F | C").',
+        )
     elif not (isinstance(song["progression"], str) and song["progression"].strip()):
-        add_error("song.progression", f"must be a non-empty string, got {song['progression']!r}.")
+        add_error(
+            "song.progression",
+            f"must be a non-empty string, got {song['progression']!r}.",
+        )
 
     if "bars" not in song:
         add_error("song.bars", "is required and must be a positive integer (e.g. 32).")
-    elif not (isinstance(song["bars"], int) and not isinstance(song["bars"], bool) and song["bars"] > 0):
+    elif not (
+        isinstance(song["bars"], int)
+        and not isinstance(song["bars"], bool)
+        and song["bars"] > 0
+    ):
         add_error("song.bars", f"must be a positive integer, got {song['bars']!r}.")
 
     seed = song.get("seed", 0)
@@ -208,23 +226,34 @@ def validate_config(config: dict) -> dict:
     song["time_signature"] = ts
     m = TIME_SIGNATURE_RE.match(ts)
     if not m:
-        add_error("song.time_signature", f"must match 'numerator/denominator', got {ts!r}.")
+        add_error(
+            "song.time_signature", f"must match 'numerator/denominator', got {ts!r}."
+        )
     else:
         num, den = int(m.group(1)), int(m.group(2))
         if num <= 0 or den <= 0:
-            add_error("song.time_signature", "numerator and denominator must be positive integers.")
+            add_error(
+                "song.time_signature",
+                "numerator and denominator must be positive integers.",
+            )
 
     for stem_key, default_keyword in STEM_DEFAULTS.items():
         val = stems.get(stem_key, default_keyword)
         if not isinstance(val, str) or not val.strip():
-            add_error(f"stems.{stem_key}", f"must be a non-empty string keyword, got {val!r}.")
-        stems[stem_key] = val if isinstance(val, str) and val.strip() else default_keyword
+            add_error(
+                f"stems.{stem_key}", f"must be a non-empty string keyword, got {val!r}."
+            )
+        stems[stem_key] = (
+            val if isinstance(val, str) and val.strip() else default_keyword
+        )
     for stem_key, default_keyword in OPTIONAL_STEM_DEFAULTS.items():
         if stem_key not in stems:
             continue
         val = stems.get(stem_key, default_keyword)
         if not isinstance(val, str) or not val.strip():
-            add_error(f"stems.{stem_key}", f"must be a non-empty string keyword, got {val!r}.")
+            add_error(
+                f"stems.{stem_key}", f"must be a non-empty string keyword, got {val!r}."
+            )
             stems[stem_key] = default_keyword
 
     for key, val in list(soundfonts.items()):
@@ -233,19 +262,27 @@ def validate_config(config: dict) -> dict:
             soundfonts.pop(key, None)
             continue
         if not isinstance(val, str) or not val.strip():
-            add_error(f"soundfonts.{key}", f"must be a non-empty path string, got {val!r}.")
+            add_error(
+                f"soundfonts.{key}", f"must be a non-empty path string, got {val!r}."
+            )
 
     for step, defaults in PIPELINE_DEFAULTS.items():
         raw_step = pipeline.get(step, copy.deepcopy(defaults))
         if not isinstance(raw_step, dict):
-            add_error(f"pipeline.{step}", f"must be a mapping/object, got {type(raw_step).__name__}.")
+            add_error(
+                f"pipeline.{step}",
+                f"must be a mapping/object, got {type(raw_step).__name__}.",
+            )
             raw_step = copy.deepcopy(defaults)
 
         merged = copy.deepcopy(defaults)
         merged.update(raw_step)
 
         if not isinstance(merged.get("enabled"), bool):
-            add_error(f"pipeline.{step}.enabled", f"must be true/false, got {merged.get('enabled')!r}.")
+            add_error(
+                f"pipeline.{step}.enabled",
+                f"must be true/false, got {merged.get('enabled')!r}.",
+            )
             merged["enabled"] = bool(defaults["enabled"])
 
         if step == "clean_drums":
@@ -254,7 +291,9 @@ def validate_config(config: dict) -> dict:
                     "pipeline.clean_drums.export_sidechain_trigger",
                     f"must be true/false, got {merged.get('export_sidechain_trigger')!r}.",
                 )
-                merged["export_sidechain_trigger"] = defaults["export_sidechain_trigger"]
+                merged["export_sidechain_trigger"] = defaults[
+                    "export_sidechain_trigger"
+                ]
         elif step == "clean_vocals":
             if not isinstance(merged.get("normalize"), bool):
                 add_error(
@@ -288,7 +327,9 @@ def validate_config(config: dict) -> dict:
                 merged["sidechain_ducking"] = defaults["sidechain_ducking"]
 
             ducking_depth = merged.get("ducking_depth", defaults["ducking_depth"])
-            if not _is_number(ducking_depth) or not (0.0 <= float(ducking_depth) <= 1.0):
+            if not _is_number(ducking_depth) or not (
+                0.0 <= float(ducking_depth) <= 1.0
+            ):
                 add_error(
                     "pipeline.generate_bass.ducking_depth",
                     f"must be a number between 0.0 and 1.0, got {ducking_depth!r}.",
@@ -334,7 +375,9 @@ def validate_config(config: dict) -> dict:
                 merged["max_shift_ms"] = float(max_shift_ms)
 
             min_confidence = merged.get("min_confidence", defaults["min_confidence"])
-            if not _is_number(min_confidence) or not (0.0 <= float(min_confidence) <= 1.0):
+            if not _is_number(min_confidence) or not (
+                0.0 <= float(min_confidence) <= 1.0
+            ):
                 add_error(
                     "pipeline.phase_align.min_confidence",
                     f"must be a number between 0.0 and 1.0, got {min_confidence!r}.",
@@ -358,7 +401,9 @@ def validate_config(config: dict) -> dict:
             log.warning("Unknown pipeline step ignored: pipeline.%s", step)
             pipeline.pop(step, None)
 
-    enabled_steps = [k for k, v in pipeline.items() if isinstance(v, dict) and v.get("enabled")]
+    enabled_steps = [
+        k for k, v in pipeline.items() if isinstance(v, dict) and v.get("enabled")
+    ]
     if not enabled_steps:
         log.warning("No pipeline steps are enabled; nothing will be processed.")
 
@@ -381,7 +426,9 @@ def ensure_tools_for_enabled_steps(pipe: dict) -> None:
         "ffmpeg": ["clean_vocals"],
         "fluidsynth": ["clean_drums", "generate_bass", "generate_arp", "clean_synth"],
     }
-    if pipe.get("generate_bass", {}).get("enabled") and pipe.get("generate_bass", {}).get("sidechain_ducking"):
+    if pipe.get("generate_bass", {}).get("enabled") and pipe.get(
+        "generate_bass", {}
+    ).get("sidechain_ducking"):
         tool_requirements["ffmpeg"].append("generate_bass")
     missing_by_tool: dict[str, list[str]] = {}
     for tool, steps in tool_requirements.items():
@@ -410,7 +457,11 @@ def get_soundfont(config: dict, folder: Path, key: str) -> str | None:
     """
     sf_path_str = config.get("soundfonts", {}).get(key)
     if not sf_path_str:
-        log.warning("No '%s' soundfont configured (set soundfonts.%s in song_config.yaml).", key, key)
+        log.warning(
+            "No '%s' soundfont configured (set soundfonts.%s in song_config.yaml).",
+            key,
+            key,
+        )
         return None
     sf_path = Path(sf_path_str)
     if not sf_path.is_absolute():
@@ -428,10 +479,10 @@ def _subprocess_env() -> dict:
     """
     env = os.environ.copy()
     repo_root = Path(__file__).resolve().parent.parent
-    
+
     if (repo_root / "pyproject.toml").exists():
         env["PYTHONPATH"] = str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
-    
+
     return env
 
 
@@ -451,7 +502,7 @@ def find_file(folder: Path, keyword: str) -> Path | None:
             continue
         if f.suffix.lower() not in (".wav", ".mp3"):
             continue
-            
+
         name = f.stem.lower()
 
         if name == kw:
@@ -535,7 +586,9 @@ def build_preview_mix_filter(num_inputs: int) -> str:
     )
 
 
-def build_stem_cleaner_cmd(input_path: Path, output_path: Path, step_cfg: dict) -> list[str]:
+def build_stem_cleaner_cmd(
+    input_path: Path, output_path: Path, step_cfg: dict
+) -> list[str]:
     """Build stem_cleaner subprocess args from validated config."""
     cmd = [
         sys.executable,
@@ -681,7 +734,7 @@ def run_phase_alignment_pair(
             max_shift_ms=float(phase_cfg.get("max_shift_ms", 12.0)),
             min_confidence=float(phase_cfg.get("min_confidence", 0.35)),
         )
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.warning("%s alignment failed: %s", pair_label, e)
         return AlignmentResult(
             applied=False,
@@ -767,16 +820,18 @@ def write_phase_alignment_report(gen_dir: Path, entries: list[dict]) -> Path | N
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="The Bandleader: Audio Pipeline Orchestrator")
+    parser = argparse.ArgumentParser(
+        description="The Bandleader: Audio Pipeline Orchestrator"
+    )
     parser.add_argument("folder", help="Folder containing stems and song_config.yaml")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug output")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     folder = Path(args.folder).resolve()
     if not folder.exists():
@@ -810,21 +865,29 @@ def main() -> None:
 
         sf2_drums = get_soundfont(config, folder, "drums")
         if not sf2_drums:
-            log.error("Cannot run drum cleaning without a usable 'drums' soundfont. Aborting.")
+            log.error(
+                "Cannot run drum cleaning without a usable 'drums' soundfont. Aborting."
+            )
             sys.exit(1)
 
         log.info("[*] Cleaning Drums: %s", drum_file.name)
         drum_cfg = pipe["clean_drums"]
         cleaned_path = gen_dir / f"gen_{drum_file.stem}_clean.wav"
         midi_out_path = gen_dir / f"gen_{drum_file.stem}_drums.mid"
-        
+
         cmd = [
-            sys.executable, "-m", "bandleader.drum_cleaner",
+            sys.executable,
+            "-m",
+            "bandleader.drum_cleaner",
             str(drum_file),
-            "--soundfont", sf2_drums,
-            "--output", str(cleaned_path),
-            "--tempo", str(song["bpm"]),
-            "--midi-output", str(midi_out_path)
+            "--soundfont",
+            sf2_drums,
+            "--output",
+            str(cleaned_path),
+            "--tempo",
+            str(song["bpm"]),
+            "--midi-output",
+            str(midi_out_path),
         ]
 
         if not run_command(cmd, env=env):
@@ -834,9 +897,15 @@ def main() -> None:
         if drum_cfg.get("export_sidechain_trigger"):
             trigger_midi = gen_dir / "gen_sidechain_trigger.mid"
             trigger_wav = gen_dir / "gen_sidechain_trigger.wav"
-            sidechain_cmd = build_sidechain_trigger_cmd(midi_out_path, trigger_midi, trigger_wav, sf2_drums)
+            sidechain_cmd = build_sidechain_trigger_cmd(
+                midi_out_path, trigger_midi, trigger_wav, sf2_drums
+            )
             if run_command(sidechain_cmd, env=env):
-                log.info("Sidechain trigger exported: %s and %s", trigger_midi.name, trigger_wav.name)
+                log.info(
+                    "Sidechain trigger exported: %s and %s",
+                    trigger_midi.name,
+                    trigger_wav.name,
+                )
                 if trigger_wav.exists():
                     sidechain_key_audio = trigger_wav
             else:
@@ -876,20 +945,40 @@ def main() -> None:
             bass_cfg = pipe["generate_bass"]
             midi_out = gen_dir / "gen_bass.mid"
             wav_out = gen_dir / "gen_bass.wav"
-            
+
             cmd = [
-                sys.executable, "-m", "bandleader.bass_generator",
-                "--bpm", str(song["bpm"]),
-                "--time-signature", str(song.get("time_signature", "4/4")),
-                "--progression", str(song["progression"]),
-                "--bars", str(song["bars"]),
-                "--out", str(midi_out),
-                "--style", str(bass_cfg.get("style", "two_feel")),
-                "--seed", str(song.get("seed", 0))
+                sys.executable,
+                "-m",
+                "bandleader.bass_generator",
+                "--bpm",
+                str(song["bpm"]),
+                "--time-signature",
+                str(song.get("time_signature", "4/4")),
+                "--progression",
+                str(song["progression"]),
+                "--bars",
+                str(song["bars"]),
+                "--out",
+                str(midi_out),
+                "--style",
+                str(bass_cfg.get("style", "two_feel")),
+                "--seed",
+                str(song.get("seed", 0)),
             ]
             if run_command(cmd, env=env) and midi_out.exists():
                 log.info("[*] Rendering Bass MIDI to WAV...")
-                fs_cmd = ["fluidsynth", "-ni", "-g", "0.5", "-T", "wav", "-F", str(wav_out), sf2_bass, str(midi_out)]
+                fs_cmd = [
+                    "fluidsynth",
+                    "-ni",
+                    "-g",
+                    "0.5",
+                    "-T",
+                    "wav",
+                    "-F",
+                    str(wav_out),
+                    sf2_bass,
+                    str(midi_out),
+                ]
                 if run_command(fs_cmd, env=env) and wav_out.exists():
                     generated_audio.append(wav_out)
                     dry_bass_audio = wav_out
@@ -912,7 +1001,9 @@ def main() -> None:
                                 alignment,
                             )
                         )
-                        selected = select_alignment_preview_source(alignment, aligned_out, dry_bass_audio)
+                        selected = select_alignment_preview_source(
+                            alignment, aligned_out, dry_bass_audio
+                        )
                         if selected is not None:
                             generated_audio[-1] = selected
 
@@ -928,11 +1019,18 @@ def main() -> None:
                             )
                             if run_command(duck_cmd, env=env) and ducked_out.exists():
                                 generated_audio[-1] = ducked_out
-                                log.info("Generated sidechain-ducked bass stem: %s", ducked_out.name)
+                                log.info(
+                                    "Generated sidechain-ducked bass stem: %s",
+                                    ducked_out.name,
+                                )
                             else:
-                                log.warning("Bass ducking failed; keeping dry bass only.")
+                                log.warning(
+                                    "Bass ducking failed; keeping dry bass only."
+                                )
                         else:
-                            log.warning("Bass ducking enabled but no sidechain key source found; keeping dry bass only.")
+                            log.warning(
+                                "Bass ducking enabled but no sidechain key source found; keeping dry bass only."
+                            )
                 else:
                     log.warning("FluidSynth rendering failed for Bass.")
             else:
@@ -950,19 +1048,40 @@ def main() -> None:
             wav_out = gen_dir / "gen_arp.wav"
 
             cmd = [
-                sys.executable, "-m", "bandleader.arp_generator",
-                "--bpm", str(song["bpm"]),
-                "--time-signature", str(song.get("time_signature", "4/4")),
-                "--progression", str(song["progression"]),
-                "--bars", str(song["bars"]),
-                "--out", str(midi_out),
-                "--style", str(arp_cfg.get("style", "eighths")),
-                "--motion", str(arp_cfg.get("motion", "updown")),
-                "--seed", str(song.get("seed", 0))
+                sys.executable,
+                "-m",
+                "bandleader.arp_generator",
+                "--bpm",
+                str(song["bpm"]),
+                "--time-signature",
+                str(song.get("time_signature", "4/4")),
+                "--progression",
+                str(song["progression"]),
+                "--bars",
+                str(song["bars"]),
+                "--out",
+                str(midi_out),
+                "--style",
+                str(arp_cfg.get("style", "eighths")),
+                "--motion",
+                str(arp_cfg.get("motion", "updown")),
+                "--seed",
+                str(song.get("seed", 0)),
             ]
             if run_command(cmd, env=env) and midi_out.exists():
                 log.info("[*] Rendering Arp MIDI to WAV...")
-                fs_cmd = ["fluidsynth", "-ni", "-g", "0.5", "-T", "wav", "-F", str(wav_out), sf2_arp, str(midi_out)]
+                fs_cmd = [
+                    "fluidsynth",
+                    "-ni",
+                    "-g",
+                    "0.5",
+                    "-T",
+                    "wav",
+                    "-F",
+                    str(wav_out),
+                    sf2_arp,
+                    str(midi_out),
+                ]
                 if run_command(fs_cmd, env=env) and wav_out.exists():
                     generated_audio.append(wav_out)
                 else:
@@ -984,11 +1103,16 @@ def main() -> None:
             log.info("[*] Cleaning Synth: %s", synth_file.name)
             cleaned_path = gen_dir / f"gen_{synth_file.stem}_clean.wav"
             cmd = [
-                sys.executable, "-m", "bandleader.synth_cleaner",
+                sys.executable,
+                "-m",
+                "bandleader.synth_cleaner",
                 str(synth_file),
-                "--soundfont", sf2_synth,
-                "--output", str(cleaned_path),
-                "--tempo", str(song["bpm"])
+                "--soundfont",
+                sf2_synth,
+                "--output",
+                str(cleaned_path),
+                "--tempo",
+                str(song["bpm"]),
             ]
             if run_command(cmd, env=env) and cleaned_path.exists():
                 generated_audio.append(cleaned_path)
@@ -1040,7 +1164,9 @@ def main() -> None:
                         alignment,
                     )
                 )
-                preview_source = select_alignment_preview_source(alignment, overheads_out, overheads_file)
+                preview_source = select_alignment_preview_source(
+                    alignment, overheads_out, overheads_file
+                )
                 if preview_source is not None:
                     generated_audio.append(preview_source)
 
@@ -1086,7 +1212,9 @@ def main() -> None:
                         alignment,
                     )
                 )
-                preview_source = select_alignment_preview_source(alignment, guitars_out, guitars_file)
+                preview_source = select_alignment_preview_source(
+                    alignment, guitars_out, guitars_file
+                )
                 if preview_source is not None:
                     generated_audio.append(preview_source)
 
@@ -1132,7 +1260,9 @@ def main() -> None:
             log.info("Workflow Complete.")
             log.info("  Preview: %s", preview_path)
         else:
-            log.warning("Workflow Complete (with warnings). Preview mix was not created.")
+            log.warning(
+                "Workflow Complete (with warnings). Preview mix was not created."
+            )
         log.info("  Stems:   %s", gen_dir / "gen_*.wav")
         log.info("  Folder:  %s", gen_dir)
     else:

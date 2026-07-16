@@ -43,12 +43,14 @@ log = logging.getLogger(__name__)
 # Optional conversion for MP3/etc.
 try:
     from pydub import AudioSegment
+
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
 
 try:
     import librosa
+
     LIBROSA_AVAILABLE = True
 except ImportError:
     LIBROSA_AVAILABLE = False
@@ -60,19 +62,19 @@ except ImportError:
 
 SYNTH_PRESETS = {
     "lead": dict(
-        fmin=130.0,   # C3 — typical lead synth low end
+        fmin=130.0,  # C3 — typical lead synth low end
         fmax=2093.0,  # C7 — typical lead synth high end
         rms_gate_db=-28.0,
         pitch_smoothing=0.05,
     ),
     "bass": dict(
-        fmin=41.0,    # E1 — bass synth fundamental
-        fmax=400.0,   # ~G4 — bass synth rarely goes higher
+        fmin=41.0,  # E1 — bass synth fundamental
+        fmax=400.0,  # ~G4 — bass synth rarely goes higher
         rms_gate_db=-32.0,
         pitch_smoothing=0.08,
     ),
     "pluck": dict(
-        fmin=130.0,   # C3
+        fmin=130.0,  # C3
         fmax=4186.0,  # C8 — pluck/guitar-style can reach very high harmonics
         rms_gate_db=-24.0,
         pitch_smoothing=0.02,  # Less smoothing preserves the pluck attack transient
@@ -95,7 +97,8 @@ def convert_to_wav(input_file: str) -> tuple[str, bool]:
     if not PYDUB_AVAILABLE:
         log.warning(
             "Cannot convert %s to WAV without pydub. Proceeding with original file: %s",
-            input_path.suffix, input_file
+            input_path.suffix,
+            input_file,
         )
         return str(input_path), False
 
@@ -118,7 +121,9 @@ def estimate_tempo_bpm(audio_file: str) -> float:
     Used only if user requests tempo estimation.
     """
     if not LIBROSA_AVAILABLE:
-        raise ImportError("librosa is required for tempo estimation. Install with: pip install librosa")
+        raise ImportError(
+            "librosa is required for tempo estimation. Install with: pip install librosa"
+        )
 
     y, sr = librosa.load(audio_file, sr=None, mono=True)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
@@ -130,7 +135,9 @@ def estimate_tempo_bpm(audio_file: str) -> float:
     return bpm
 
 
-def choose_tempo_bpm(audio_file: str, user_bpm: Optional[float], use_estimate: bool) -> float:
+def choose_tempo_bpm(
+    audio_file: str, user_bpm: Optional[float], use_estimate: bool
+) -> float:
     """
     Choose tempo:
     - If user provided: use it
@@ -146,7 +153,7 @@ def choose_tempo_bpm(audio_file: str, user_bpm: Optional[float], use_estimate: b
             est = float(np.clip(est, 50.0, 240.0))
             log.info("Estimated tempo: %.1f BPM", est)
             return est
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             log.warning("Tempo estimation failed: %s. Defaulting to 120 BPM.", e)
 
     return 120.0
@@ -192,7 +199,9 @@ def apply_median_filter(data: np.ndarray, window_size: int = 5) -> np.ndarray:
     return filtered
 
 
-def warn_if_likely_polyphonic(midi: np.ndarray, voiced_flag: np.ndarray, voiced_probs: np.ndarray) -> None:
+def warn_if_likely_polyphonic(
+    midi: np.ndarray, voiced_flag: np.ndarray, voiced_probs: np.ndarray
+) -> None:
     """
     Print a warning if the signal looks polyphonic/noisy for monophonic pitch tracking.
 
@@ -211,7 +220,11 @@ def warn_if_likely_polyphonic(midi: np.ndarray, voiced_flag: np.ndarray, voiced_
         voiced_ratio = float(voiced_idx.mean())
 
         vp = voiced_probs[voiced_idx] if voiced_probs is not None else None
-        vp_med = float(np.median(vp)) if vp is not None and np.isfinite(vp).any() else float("nan")
+        vp_med = (
+            float(np.median(vp))
+            if vp is not None and np.isfinite(vp).any()
+            else float("nan")
+        )
 
         m = midi[voiced_idx]
         diffs = np.abs(np.diff(m))
@@ -220,9 +233,9 @@ def warn_if_likely_polyphonic(midi: np.ndarray, voiced_flag: np.ndarray, voiced_
 
         # Heuristic thresholds tuned to be conservative (warn only when pretty suspicious)
         suspicious = (
-            (voiced_ratio < 0.55) or
-            (np.isfinite(vp_med) and vp_med < 0.70) or
-            (jump_rate > 0.30)
+            (voiced_ratio < 0.55)
+            or (np.isfinite(vp_med) and vp_med < 0.70)
+            or (jump_rate > 0.30)
         )
 
         if suspicious:
@@ -232,7 +245,7 @@ def warn_if_likely_polyphonic(midi: np.ndarray, voiced_flag: np.ndarray, voiced_
                 "stuttering, octave flips).\n"
                 "If this is a chord/pad or layered sound, expect quality loss vs the original."
             )
-    except Exception:
+    except (RuntimeError, OSError, ValueError):
         # Never fail the run due to a warning heuristic
         return
 
@@ -274,7 +287,7 @@ def synth_to_notes_monophonic(
         sr=sr,
         frame_length=frame_length,
         hop_length=hop_length,
-        fill_na=None  # Don't interpolate gaps
+        fill_na=None,  # Don't interpolate gaps
     )
 
     # Calculate RMS energy for gating
@@ -282,9 +295,9 @@ def synth_to_notes_monophonic(
 
     # Ensure RMS and f0 arrays are same length
     if len(rms) < len(f0):
-        rms = np.pad(rms, (0, len(f0) - len(rms)), mode='edge')
+        rms = np.pad(rms, (0, len(f0) - len(rms)), mode="edge")
     elif len(rms) > len(f0):
-        rms = rms[:len(f0)]
+        rms = rms[: len(f0)]
 
     # RMS Gating: Calculate dynamic threshold
     # Use 95th percentile to avoid being thrown off by a few loud peaks
@@ -315,9 +328,13 @@ def synth_to_notes_monophonic(
     if len(valid_midi) > 0:
         detected_range_hz = (
             2 ** ((valid_midi.min() - 69) / 12) * 440,
-            2 ** ((valid_midi.max() - 69) / 12) * 440
+            2 ** ((valid_midi.max() - 69) / 12) * 440,
         )
-        log.info("Detected pitch range: %.1f - %.1f Hz", detected_range_hz[0], detected_range_hz[1])
+        log.info(
+            "Detected pitch range: %.1f - %.1f Hz",
+            detected_range_hz[0],
+            detected_range_hz[1],
+        )
 
         if detected_range_hz[0] < fmin_hz * 0.9 or detected_range_hz[1] > fmax_hz * 1.1:
             log.warning(
@@ -355,7 +372,9 @@ def synth_to_notes_monophonic(
         v = float(np.median(seg_rms))
         scale = float(np.percentile(rms, 95)) + 1e-9
         v_norm = np.clip(v / scale, 0.0, 1.0)
-        velocity = int(round(velocity_floor + v_norm * (velocity_ceil - velocity_floor)))
+        velocity = int(
+            round(velocity_floor + v_norm * (velocity_ceil - velocity_floor))
+        )
         velocity = int(np.clip(velocity, 1, 127))
 
         start_t = float(times[start_f])
@@ -389,7 +408,9 @@ def synth_to_notes_monophonic(
 
                 if pitch_diff <= semitone_tol:
                     # Pitch is stable: smooth tracking for vibrato/bends
-                    current_pitch = (1 - pitch_smoothing) * current_pitch + pitch_smoothing * float(midi[i])
+                    current_pitch = (
+                        1 - pitch_smoothing
+                    ) * current_pitch + pitch_smoothing * float(midi[i])
                 else:
                     # Pitch changed significantly: end current note
                     break
@@ -450,8 +471,26 @@ def notes_to_midi(
         end_tick = int(round(float(end_t) * ticks_per_second))
         end_tick = max(end_tick, start_tick + 1)
 
-        events.append((start_tick, Message("note_on", note=int(midi_note), velocity=int(vel), time=0, channel=channel)))
-        events.append((end_tick, Message("note_off", note=int(midi_note), velocity=0, time=0, channel=channel)))
+        events.append(
+            (
+                start_tick,
+                Message(
+                    "note_on",
+                    note=int(midi_note),
+                    velocity=int(vel),
+                    time=0,
+                    channel=channel,
+                ),
+            )
+        )
+        events.append(
+            (
+                end_tick,
+                Message(
+                    "note_off", note=int(midi_note), velocity=0, time=0, channel=channel
+                ),
+            )
+        )
 
     # Sort by time; note_off before note_on at same time
     def sort_key(ev):
@@ -474,7 +513,9 @@ def notes_to_midi(
     return output_midi
 
 
-def render_midi_with_fluidsynth(midi_file: Path, soundfont: str, output_wav: Path, gain: float = 0.5) -> Path:
+def render_midi_with_fluidsynth(
+    midi_file: Path, soundfont: str, output_wav: Path, gain: float = 0.5
+) -> Path:
     """
     Render MIDI file to WAV using FluidSynth.
 
@@ -506,15 +547,18 @@ def render_midi_with_fluidsynth(midi_file: Path, soundfont: str, output_wav: Pat
 
     cmd = [
         "fluidsynth",
-        "-ni",           # Non-interactive
-        "-g", str(gain), # Gain
-        "-T", "wav",     # Output format
-        "-F", str(output_wav),  # Output file
+        "-ni",  # Non-interactive
+        "-g",
+        str(gain),  # Gain
+        "-T",
+        "wav",  # Output format
+        "-F",
+        str(output_wav),  # Output file
         soundfont,
-        str(midi_file)
+        str(midi_file),
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if result.returncode != 0:
         log.error("FluidSynth stderr: %s", result.stderr)
         raise RuntimeError(f"FluidSynth failed with code {result.returncode}")
@@ -530,11 +574,17 @@ def main():
 
     # Required arguments
     parser.add_argument("input_file", help="Input audio file (WAV, MP3, etc.)")
-    parser.add_argument("--soundfont", "-s", required=True, help="Path to .sf2 soundfont")
+    parser.add_argument(
+        "--soundfont", "-s", required=True, help="Path to .sf2 soundfont"
+    )
 
     # Output options
-    parser.add_argument("--output", "-o", help="Output WAV file (default: input_synth_clean.wav)")
-    parser.add_argument("--midi-output", "-m", help="Output MIDI file (default: input_synth.mid)")
+    parser.add_argument(
+        "--output", "-o", help="Output WAV file (default: input_synth_clean.wav)"
+    )
+    parser.add_argument(
+        "--midi-output", "-m", help="Output MIDI file (default: input_synth.mid)"
+    )
 
     # Preset (sets sensible defaults for common synth types)
     parser.add_argument(
@@ -549,43 +599,84 @@ def main():
     )
 
     # Tempo options
-    parser.add_argument("--tempo", "-t", type=float, help="Tempo in BPM (recommended if known)")
-    parser.add_argument("--use-tempo-estimate", action="store_true",
-                        help="Auto-estimate tempo if not provided")
+    parser.add_argument(
+        "--tempo", "-t", type=float, help="Tempo in BPM (recommended if known)"
+    )
+    parser.add_argument(
+        "--use-tempo-estimate",
+        action="store_true",
+        help="Auto-estimate tempo if not provided",
+    )
 
     # Render options
-    parser.add_argument("--gain", type=float, default=0.5, help="FluidSynth gain (default: 0.5)")
-    parser.add_argument("--program", type=int, default=81, help="GM program number (default: 81)")
+    parser.add_argument(
+        "--gain", type=float, default=0.5, help="FluidSynth gain (default: 0.5)"
+    )
+    parser.add_argument(
+        "--program", type=int, default=81, help="GM program number (default: 81)"
+    )
 
     # Pitch detection range
-    parser.add_argument("--hop-length", type=int, default=512,
-                        help="Hop length in samples for pitch tracking (default: 512). Lower = better timing, slower.")
-    parser.add_argument("--fmin", type=float, default=None,
-                        help="Minimum frequency in Hz (default: 65.0 = C2, or preset value)")
-    parser.add_argument("--fmax", type=float, default=None,
-                        help="Maximum frequency in Hz (default: 2093.0 = C7, or preset value)")
+    parser.add_argument(
+        "--hop-length",
+        type=int,
+        default=512,
+        help="Hop length in samples for pitch tracking (default: 512). Lower = better timing, slower.",
+    )
+    parser.add_argument(
+        "--fmin",
+        type=float,
+        default=None,
+        help="Minimum frequency in Hz (default: 65.0 = C2, or preset value)",
+    )
+    parser.add_argument(
+        "--fmax",
+        type=float,
+        default=None,
+        help="Maximum frequency in Hz (default: 2093.0 = C7, or preset value)",
+    )
 
     # Transcription tuning
-    parser.add_argument("--min-note-ms", type=float, default=60.0,
-                        help="Minimum note duration in ms (default: 60)")
-    parser.add_argument("--min-silence-ms", type=float, default=40.0,
-                        help="Minimum silence between notes in ms (default: 40)")
-    parser.add_argument("--cents-tolerance", type=float, default=50.0,
-                        help="Pitch deviation tolerance in cents (default: 50 = quarter tone)")
-    parser.add_argument("--gate-db", type=float, default=None,
-                        help="RMS noise gate threshold in dB (default: -30, or preset value)")
-    parser.add_argument("--pitch-smoothing", type=float, default=None,
-                        help="Pitch tracking smoothing factor 0.0-1.0 (default: 0.05, or preset value)")
+    parser.add_argument(
+        "--min-note-ms",
+        type=float,
+        default=60.0,
+        help="Minimum note duration in ms (default: 60)",
+    )
+    parser.add_argument(
+        "--min-silence-ms",
+        type=float,
+        default=40.0,
+        help="Minimum silence between notes in ms (default: 40)",
+    )
+    parser.add_argument(
+        "--cents-tolerance",
+        type=float,
+        default=50.0,
+        help="Pitch deviation tolerance in cents (default: 50 = quarter tone)",
+    )
+    parser.add_argument(
+        "--gate-db",
+        type=float,
+        default=None,
+        help="RMS noise gate threshold in dB (default: -30, or preset value)",
+    )
+    parser.add_argument(
+        "--pitch-smoothing",
+        type=float,
+        default=None,
+        help="Pitch tracking smoothing factor 0.0-1.0 (default: 0.05, or preset value)",
+    )
 
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug output")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
 
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     if not PYDUB_AVAILABLE:
         log.warning("pydub not available. MP3 conversion may be limited.")
@@ -624,8 +715,16 @@ def main():
     if not input_path.exists():
         log.error("Input file not found: %s", input_path)
         sys.exit(1)
-    output_wav = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_synth_clean.wav")
-    midi_path = Path(args.midi_output) if args.midi_output else input_path.with_name(f"{input_path.stem}_synth.mid")
+    output_wav = (
+        Path(args.output)
+        if args.output
+        else input_path.with_name(f"{input_path.stem}_synth_clean.wav")
+    )
+    midi_path = (
+        Path(args.midi_output)
+        if args.midi_output
+        else input_path.with_name(f"{input_path.stem}_synth.mid")
+    )
 
     wav_file = None
     created_temp = False
@@ -674,7 +773,9 @@ def main():
             )
 
         if not notes:
-            log.error("No notes extracted. This may not be a clean monophonic synth stem.")
+            log.error(
+                "No notes extracted. This may not be a clean monophonic synth stem."
+            )
             sys.exit(1)
 
         # Write MIDI
@@ -683,7 +784,7 @@ def main():
             output_midi=midi_path,
             tempo_bpm=tempo_bpm,
             program=args.program,
-            channel=0
+            channel=0,
         )
 
         # Render MIDI -> WAV
@@ -691,7 +792,7 @@ def main():
             midi_file=midi_path,
             soundfont=args.soundfont,
             output_wav=output_wav,
-            gain=args.gain
+            gain=args.gain,
         )
 
         log.info("=" * 60)
@@ -700,10 +801,11 @@ def main():
         log.info("Clean synth saved to: %s", output_wav)
         log.info("=" * 60)
 
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.error("Error: %s", e)
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

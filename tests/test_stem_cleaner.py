@@ -33,7 +33,7 @@ def test_run_ffmpeg_audit_log_includes_metadata(monkeypatch, tmp_path: Path):
         returncode = 0
         stderr = ""
 
-    def fake_run(_cmd, capture_output=True, text=True):
+    def fake_run(_cmd, capture_output=True, text=True, **kwargs):
         output_file.write_text("rendered", encoding="utf-8")
         return _Proc()
 

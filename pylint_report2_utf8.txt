@@ -1,0 +1,279 @@
+﻿************* Module bandleader.arp_generator
+bandleader\arp_generator.py:149:0: C0301: Line too long (101/100) (line-too-long)
+bandleader\arp_generator.py:25:0: E0401: Unable to import 'mido' (import-error)
+bandleader\arp_generator.py:40:0: R0902: Too many instance attributes (9/7) (too-many-instance-attributes)
+bandleader\arp_generator.py:104:0: R0914: Too many local variables (17/15) (too-many-locals)
+bandleader\arp_generator.py:123:8: C0200: Consider using enumerate instead of iterating with range and len (consider-using-enumerate)
+bandleader\arp_generator.py:146:49: W0640: Cell variable prev_target defined in loop (cell-var-from-loop)
+bandleader\arp_generator.py:161:4: C0200: Consider using enumerate instead of iterating with range and len (consider-using-enumerate)
+bandleader\arp_generator.py:246:0: R0911: Too many return statements (7/6) (too-many-return-statements)
+bandleader\arp_generator.py:301:0: R0913: Too many arguments (9/5) (too-many-arguments)
+bandleader\arp_generator.py:301:0: R0914: Too many local variables (40/15) (too-many-locals)
+bandleader\arp_generator.py:357:8: C0104: Disallowed name "bar" (disallowed-name)
+bandleader\arp_generator.py:301:0: R0912: Too many branches (14/12) (too-many-branches)
+bandleader\arp_generator.py:301:0: R0915: Too many statements (57/50) (too-many-statements)
+bandleader\arp_generator.py:459:0: R0914: Too many local variables (21/15) (too-many-locals)
+bandleader\arp_generator.py:665:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+bandleader\arp_generator.py:674:8: W0707: Consider explicitly re-raising using 'raise SystemExit(2) from e' (raise-missing-from)
+bandleader\arp_generator.py:684:8: W0707: Consider explicitly re-raising using 'except ValueError as exc' and 'raise SystemExit(2) from exc' (raise-missing-from)
+bandleader\arp_generator.py:729:8: W0707: Consider explicitly re-raising using 'raise SystemExit(2) from e' (raise-missing-from)
+bandleader\arp_generator.py:20:0: W0611: Unused import sys (unused-import)
+************* Module bandleader.bandleader
+bandleader\bandleader.py:1032:0: C0301: Line too long (112/100) (line-too-long)
+bandleader\bandleader.py:1:0: C0302: Too many lines in module (1273/1000) (too-many-lines)
+bandleader\bandleader.py:19:0: E0401: Unable to import 'yaml' (import-error)
+bandleader\bandleader.py:137:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\bandleader.py:159:0: R0914: Too many local variables (31/15) (too-many-locals)
+bandleader\bandleader.py:159:0: R0912: Too many branches (54/12) (too-many-branches)
+bandleader\bandleader.py:159:0: R0915: Too many statements (146/50) (too-many-statements)
+bandleader\bandleader.py:822:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\bandleader.py:822:0: R0914: Too many local variables (57/15) (too-many-locals)
+bandleader\bandleader.py:832:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+bandleader\bandleader.py:939:4: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+bandleader\bandleader.py:939:4: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+bandleader\bandleader.py:822:0: R0912: Too many branches (59/12) (too-many-branches)
+bandleader\bandleader.py:822:0: R0915: Too many statements (202/50) (too-many-statements)
+bandleader\bandleader.py:20:0: C0411: standard import "shlex" should be placed before third party import "yaml" (wrong-import-order)
+bandleader\bandleader.py:21:0: C0411: standard import "subprocess" should be placed before third party import "yaml" (wrong-import-order)
+bandleader\bandleader.py:22:0: C0411: standard import "argparse" should be placed before third party import "yaml" (wrong-import-order)
+bandleader\bandleader.py:23:0: C0411: standard import "shutil" should be placed before third party import "yaml" (wrong-import-order)
+bandleader\bandleader.py:24:0: C0411: standard import "pathlib.Path" should be placed before third party import "yaml" (wrong-import-order)
+************* Module bandleader.bass_generator
+bandleader\bass_generator.py:343:0: C0301: Line too long (105/100) (line-too-long)
+bandleader\bass_generator.py:24:0: E0401: Unable to import 'mido' (import-error)
+bandleader\bass_generator.py:25:0: E0401: Unable to import 'mido' (import-error)
+bandleader\bass_generator.py:45:0: C0115: Missing class docstring (missing-class-docstring)
+bandleader\bass_generator.py:45:0: R0902: Too many instance attributes (8/7) (too-many-instance-attributes)
+bandleader\bass_generator.py:61:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\bass_generator.py:61:0: R0913: Too many arguments (8/5) (too-many-arguments)
+bandleader\bass_generator.py:61:0: R0914: Too many local variables (40/15) (too-many-locals)
+bandleader\bass_generator.py:113:15: R1714: Consider merging these comparisons with 'in' by using 'step in (0, steps_per_beat * 2)'. Use a set instead if elements are hashable. (consider-using-in)
+bandleader\bass_generator.py:115:8: C0104: Disallowed name "bar" (disallowed-name)
+bandleader\bass_generator.py:61:0: R0912: Too many branches (15/12) (too-many-branches)
+bandleader\bass_generator.py:61:0: R0915: Too many statements (65/50) (too-many-statements)
+bandleader\bass_generator.py:201:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\bass_generator.py:201:0: R0913: Too many arguments (6/5) (too-many-arguments)
+bandleader\bass_generator.py:201:0: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+bandleader\bass_generator.py:201:0: R0914: Too many local variables (18/15) (too-many-locals)
+bandleader\bass_generator.py:245:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\bass_generator.py:325:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+************* Module bandleader.chord_parser
+bandleader\chord_parser.py:132:0: R0911: Too many return statements (10/6) (too-many-return-statements)
+bandleader\chord_parser.py:221:8: C0104: Disallowed name "bar" (disallowed-name)
+bandleader\chord_parser.py:239:8: C0104: Disallowed name "bar" (disallowed-name)
+bandleader\chord_parser.py:257:8: C0104: Disallowed name "bar" (disallowed-name)
+************* Module bandleader.cli_args
+bandleader\cli_args.py:12:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\cli_args.py:24:0: C0116: Missing function or method docstring (missing-function-docstring)
+************* Module bandleader.drum_cleaner
+bandleader\drum_cleaner.py:167:0: C0301: Line too long (105/100) (line-too-long)
+bandleader\drum_cleaner.py:33:0: E0401: Unable to import 'numpy' (import-error)
+bandleader\drum_cleaner.py:34:0: E0401: Unable to import 'mido' (import-error)
+bandleader\drum_cleaner.py:35:0: E0401: Unable to import 'mido' (import-error)
+bandleader\drum_cleaner.py:200:0: R0914: Too many local variables (20/15) (too-many-locals)
+bandleader\drum_cleaner.py:331:15: E0602: Undefined variable 'exc' (undefined-variable)
+bandleader\drum_cleaner.py:359:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\drum_cleaner.py:388:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+bandleader\drum_cleaner.py:440:12: C0415: Import outside toplevel (traceback) (import-outside-toplevel)
+************* Module bandleader.phase_alignment
+bandleader\phase_alignment.py:16:0: E0401: Unable to import 'numpy' (import-error)
+bandleader\phase_alignment.py:17:0: E0401: Unable to import 'scipy.io' (import-error)
+bandleader\phase_alignment.py:18:0: E0401: Unable to import 'scipy.signal' (import-error)
+bandleader\phase_alignment.py:119:0: R0914: Too many local variables (35/15) (too-many-locals)
+************* Module bandleader.sidechain_trigger
+bandleader\sidechain_trigger.py:12:0: E0401: Unable to import 'mido' (import-error)
+bandleader\sidechain_trigger.py:46:0: R0913: Too many arguments (6/5) (too-many-arguments)
+bandleader\sidechain_trigger.py:46:0: R0914: Too many local variables (19/15) (too-many-locals)
+bandleader\sidechain_trigger.py:94:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\sidechain_trigger.py:114:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\sidechain_trigger.py:161:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+************* Module bandleader.stem_cleaner
+bandleader\stem_cleaner.py:6:0: C0301: Line too long (103/100) (line-too-long)
+bandleader\stem_cleaner.py:10:0: C0301: Line too long (121/100) (line-too-long)
+bandleader\stem_cleaner.py:459:0: C0301: Line too long (102/100) (line-too-long)
+bandleader\stem_cleaner.py:181:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\stem_cleaner.py:243:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\stem_cleaner.py:343:0: R0913: Too many arguments (8/5) (too-many-arguments)
+bandleader\stem_cleaner.py:343:0: R0914: Too many local variables (16/15) (too-many-locals)
+bandleader\stem_cleaner.py:418:0: R0914: Too many local variables (19/15) (too-many-locals)
+bandleader\stem_cleaner.py:473:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+bandleader\stem_cleaner.py:418:0: R0912: Too many branches (13/12) (too-many-branches)
+bandleader\stem_cleaner.py:418:0: R0915: Too many statements (71/50) (too-many-statements)
+************* Module bandleader.synth_cleaner
+bandleader\synth_cleaner.py:624:0: C0301: Line too long (103/100) (line-too-long)
+bandleader\synth_cleaner.py:685:0: C0301: Line too long (102/100) (line-too-long)
+bandleader\synth_cleaner.py:37:0: E0401: Unable to import 'numpy' (import-error)
+bandleader\synth_cleaner.py:38:0: E0401: Unable to import 'mido' (import-error)
+bandleader\synth_cleaner.py:39:0: E0401: Unable to import 'mido' (import-error)
+bandleader\synth_cleaner.py:64:12: R1735: Consider using '{"fmin": 130.0, "fmax": 2093.0, "rms_gate_db": -28.0, "pitch_smoothing": 0.05, ... }' instead of a call to 'dict'. (use-dict-literal)
+bandleader\synth_cleaner.py:70:12: R1735: Consider using '{"fmin": 41.0, "fmax": 400.0, "rms_gate_db": -32.0, "pitch_smoothing": 0.08, ... }' instead of a call to 'dict'. (use-dict-literal)
+bandleader\synth_cleaner.py:76:13: R1735: Consider using '{"fmin": 130.0, "fmax": 4186.0, "rms_gate_db": -24.0, "pitch_smoothing": 0.02, ... }' instead of a call to 'dict'. (use-dict-literal)
+bandleader\synth_cleaner.py:253:0: R0913: Too many arguments (12/5) (too-many-arguments)
+bandleader\synth_cleaner.py:253:0: R0917: Too many positional arguments (12/5) (too-many-positional-arguments)
+bandleader\synth_cleaner.py:253:0: R0914: Too many local variables (40/15) (too-many-locals)
+bandleader\synth_cleaner.py:253:0: R0912: Too many branches (17/12) (too-many-branches)
+bandleader\synth_cleaner.py:253:0: R0915: Too many statements (83/50) (too-many-statements)
+bandleader\synth_cleaner.py:439:0: R0913: Too many arguments (6/5) (too-many-arguments)
+bandleader\synth_cleaner.py:439:0: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+bandleader\synth_cleaner.py:439:0: R0914: Too many local variables (22/15) (too-many-locals)
+bandleader\synth_cleaner.py:537:8: W0707: Consider explicitly re-raising using 'except (subprocess.CalledProcessError, FileNotFoundError) as exc' and 'raise RuntimeError('FluidSynth not found. Install it:\n  macOS: brew install fluid-synth\n  Linux: apt-get install fluidsynth\n  Windows: https://github.com/FluidSynth/fluidsynth/releases') from exc' (raise-missing-from)
+bandleader\synth_cleaner.py:570:0: C0116: Missing function or method docstring (missing-function-docstring)
+bandleader\synth_cleaner.py:570:0: R0914: Too many local variables (17/15) (too-many-locals)
+bandleader\synth_cleaner.py:677:4: C0415: Import outside toplevel (bandleader.utils.setup_logging) (import-outside-toplevel)
+bandleader\synth_cleaner.py:807:12: C0415: Import outside toplevel (traceback) (import-outside-toplevel)
+bandleader\synth_cleaner.py:570:0: R0912: Too many branches (18/12) (too-many-branches)
+bandleader\synth_cleaner.py:570:0: R0915: Too many statements (87/50) (too-many-statements)
+************* Module bandleader.utils
+bandleader\utils.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module bandleader.__main__
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[436:455]
+==bandleader.synth_cleaner:[803:823]
+    except (RuntimeError, OSError, ValueError) as e:
+        log.error("Error: %s", e)
+        if args.verbose:
+            import traceback
+
+            traceback.print_exc()
+        sys.exit(1)
+
+    finally:
+        if created_temp and wav_file and os.path.exists(wav_file):
+            log.debug("Cleaning up temporary file: %s", wav_file)
+            try:
+                os.remove(wav_file)
+            except OSError as e:
+                log.warning("Could not remove temp file: %s", e)
+
+
+if __name__ == "__main__":
+    main() (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[89:112]
+==bandleader.synth_cleaner:[104:127]
+    log.info("Converting %s to WAV...", input_file)
+    audio = AudioSegment.from_file(input_file)
+    # Unique temp path: a fixed sibling name could overwrite a pre-existing
+    # file (then delete it during cleanup) and races between concurrent runs.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f"{input_path.stem}_", suffix=".temp.wav", dir=str(input_path.parent)
+    )
+    os.close(fd)
+    audio.export(tmp_name, format="wav")
+    log.info("Converted to %s", tmp_name)
+    return tmp_name, True
+
+
+def estimate_tempo_bpm(audio_file: str) -> float:
+    """
+    Estimate tempo using librosa. On stems this can be half/double-time.
+    Used only if user requests tempo estimation.
+    """
+    if not LIBROSA_AVAILABLE:
+        raise ImportError(
+            "librosa is required for tempo estimation. Install with: pip install librosa"
+        )
+ (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[332:343]
+==bandleader.synth_cleaner:[544:555]
+    if not os.path.exists(soundfont):
+        raise FileNotFoundError(f"Soundfont not found: {soundfont}")
+
+    cmd = [
+        "fluidsynth",
+        "-ni",
+        "-g",
+        str(gain),
+        "-T",
+        "wav",
+        "-F", (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[36:55]
+==bandleader.synth_cleaner:[40:62]
+log = logging.getLogger(__name__)
+
+# Optional conversion for MP3/etc.
+try:
+    from pydub import AudioSegment
+
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+
+try:
+    import librosa
+
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
+
+
+# ---------------------------------------------------------------------------
+# Preset definitions
+# ---------------------------------------------------------------------------
+ (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.sidechain_trigger:[96:105]
+==bandleader.synth_cleaner:[547:556]
+    cmd = [
+        "fluidsynth",
+        "-ni",
+        "-g",
+        str(gain),
+        "-T",
+        "wav",
+        "-F",
+        str(output_wav), (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[335:343]
+==bandleader.sidechain_trigger:[96:104]
+    cmd = [
+        "fluidsynth",
+        "-ni",
+        "-g",
+        str(gain),
+        "-T",
+        "wav",
+        "-F", (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.drum_cleaner:[381:395]
+==bandleader.synth_cleaner:[668:685]
+    )
+
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug output"
+    )
+
+    args = parser.parse_args()
+
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
+
+    if not PYDUB_AVAILABLE:
+        log.warning("pydub not available. MP3 conversion may be limited.")
+
+    # Apply preset defaults for unset parameters
+    # A parameter is "unset" if it still matches the parser default (None means explicit CLI override) (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.bandleader:[692:698]
+==bandleader.phase_alignment:[261:268]
+            lag_samples=0,
+            lag_ms=0.0,
+            confidence=0.0,
+            peak_correlation=0.0,
+            output_path=None,
+        ) (duplicate-code)
+bandleader\__main__.py:1:0: R0801: Similar lines in 2 files
+==bandleader.bandleader:[1140:1145]
+==bandleader.phase_alignment:[261:266]
+                            lag_samples=0,
+                            lag_ms=0.0,
+                            confidence=0.0,
+                            peak_correlation=0.0,
+                            output_path=None, (duplicate-code)
+
+------------------------------------------------------------------
+Your code has been rated at 9.09/10 (previous run: 8.74/10, +0.35)
+

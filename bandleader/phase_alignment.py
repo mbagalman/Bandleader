@@ -131,16 +131,22 @@ def estimate_lag(
     - Negative lag: target occurs earlier than reference.
     """
     if not isinstance(sample_rate, int) or sample_rate <= 0:
-        raise ValueError(f"sample_rate must be a positive integer, got {sample_rate!r}.")
+        raise ValueError(
+            f"sample_rate must be a positive integer, got {sample_rate!r}."
+        )
     if not isinstance(max_shift_ms, (int, float)) or float(max_shift_ms) <= 0:
-        raise ValueError(f"max_shift_ms must be a positive number, got {max_shift_ms!r}.")
+        raise ValueError(
+            f"max_shift_ms must be a positive number, got {max_shift_ms!r}."
+        )
 
     ref = _to_mono_float32(reference_signal)
     tgt = _to_mono_float32(target_signal)
 
     n = min(len(ref), len(tgt))
     if n < 2:
-        return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
+        return LagEstimate(
+            lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0
+        )
 
     ref = ref[:n].astype(np.float32, copy=False)
     tgt = tgt[:n].astype(np.float32, copy=False)
@@ -152,7 +158,9 @@ def estimate_lag(
     ref_rms = float(np.sqrt(np.mean(ref * ref)))
     tgt_rms = float(np.sqrt(np.mean(tgt * tgt)))
     if ref_rms < 1e-8 or tgt_rms < 1e-8:
-        return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
+        return LagEstimate(
+            lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0
+        )
 
     # Windowing makes edge truncation more stable for deterministic lag picks.
     win = np.hanning(n).astype(np.float32) if n >= 8 else np.ones(n, dtype=np.float32)
@@ -161,7 +169,9 @@ def estimate_lag(
 
     denom = float(np.linalg.norm(ref_w) * np.linalg.norm(tgt_w))
     if denom < 1e-8:
-        return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
+        return LagEstimate(
+            lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0
+        )
 
     # FFT-based correlation: O(N log N) instead of O(N^2), which makes
     # full-length stems (minutes of 48 kHz audio) practical. Values match
@@ -175,7 +185,9 @@ def estimate_lag(
     bounded_corr = corr[in_bounds]
     bounded_lags = lags[in_bounds]
     if bounded_corr.size == 0:
-        return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
+        return LagEstimate(
+            lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0
+        )
 
     # Polarity policy: only POSITIVE correlation peaks are alignment
     # candidates. Time-shifting cannot fix an inverted-polarity target, and a

@@ -16,7 +16,9 @@ from bandleader.cli_args import float_in_range, int_in_range, positive_int
 log = logging.getLogger(__name__)
 
 
-def _collect_kick_ticks(mid: mido.MidiFile, kick_note: int) -> tuple[list[int], list[tuple[int, mido.MetaMessage]]]:
+def _collect_kick_ticks(
+    mid: mido.MidiFile, kick_note: int
+) -> tuple[list[int], list[tuple[int, mido.MetaMessage]]]:
     """Collect kick note_on ticks and tempo changes across ALL tracks.
 
     Format-1 MIDI (the common DAW export layout) keeps notes in tracks 1+,
@@ -69,7 +71,9 @@ def export_trigger_midi(
     for tick, tempo_msg in tempo_events:
         events.append((tick, -1, tempo_msg))
     for t in kick_ticks:
-        on = mido.Message("note_on", note=trigger_note, velocity=velocity, channel=9, time=0)
+        on = mido.Message(
+            "note_on", note=trigger_note, velocity=velocity, channel=9, time=0
+        )
         off = mido.Message("note_off", note=trigger_note, velocity=0, channel=9, time=0)
         events.append((t, 1, on))
         events.append((t + max(1, note_len_ticks), 0, off))
@@ -87,7 +91,9 @@ def export_trigger_midi(
     return len(kick_ticks)
 
 
-def render_trigger_audio(midi_file: Path, soundfont: Path, output_wav: Path, *, gain: float = 0.2) -> None:
+def render_trigger_audio(
+    midi_file: Path, soundfont: Path, output_wav: Path, *, gain: float = 0.2
+) -> None:
     cmd = [
         "fluidsynth",
         "-ni",
@@ -100,37 +106,61 @@ def render_trigger_audio(midi_file: Path, soundfont: Path, output_wav: Path, *, 
         str(soundfont),
         str(midi_file),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "FluidSynth render failed")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Export sidechain trigger from drum MIDI")
+    parser = argparse.ArgumentParser(
+        description="Export sidechain trigger from drum MIDI"
+    )
     parser.add_argument("--input-midi", required=True)
     parser.add_argument("--output-midi", required=True)
-    parser.add_argument("--kick-note", type=int_in_range(0, 127), default=36,
-                        help="MIDI note treated as the kick 0-127 (default: 36)")
-    parser.add_argument("--trigger-note", type=int_in_range(0, 127), default=36,
-                        help="MIDI note for trigger events 0-127 (default: 36)")
-    parser.add_argument("--trigger-velocity", type=int_in_range(1, 127), default=127,
-                        help="Trigger note velocity 1-127 (default: 127)")
-    parser.add_argument("--trigger-length-ticks", type=positive_int, default=60,
-                        help="Trigger note length in ticks (default: 60)")
-    parser.add_argument("--render-audio", default=None,
-                        help="Optional output WAV path to render via FluidSynth")
-    parser.add_argument("--soundfont", default=None,
-                        help="Soundfont for --render-audio")
-    parser.add_argument("--audio-gain", type=float_in_range(0.0, 10.0), default=0.2,
-                        help="FluidSynth gain 0-10 (default: 0.2)")
+    parser.add_argument(
+        "--kick-note",
+        type=int_in_range(0, 127),
+        default=36,
+        help="MIDI note treated as the kick 0-127 (default: 36)",
+    )
+    parser.add_argument(
+        "--trigger-note",
+        type=int_in_range(0, 127),
+        default=36,
+        help="MIDI note for trigger events 0-127 (default: 36)",
+    )
+    parser.add_argument(
+        "--trigger-velocity",
+        type=int_in_range(1, 127),
+        default=127,
+        help="Trigger note velocity 1-127 (default: 127)",
+    )
+    parser.add_argument(
+        "--trigger-length-ticks",
+        type=positive_int,
+        default=60,
+        help="Trigger note length in ticks (default: 60)",
+    )
+    parser.add_argument(
+        "--render-audio",
+        default=None,
+        help="Optional output WAV path to render via FluidSynth",
+    )
+    parser.add_argument(
+        "--soundfont", default=None, help="Soundfont for --render-audio"
+    )
+    parser.add_argument(
+        "--audio-gain",
+        type=float_in_range(0.0, 10.0),
+        default=0.2,
+        help="FluidSynth gain 0-10 (default: 0.2)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stderr,
-    )
+    from bandleader.utils import setup_logging
+
+    setup_logging(args.verbose)
 
     input_midi = Path(args.input_midi)
     output_midi = Path(args.output_midi)

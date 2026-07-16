@@ -23,7 +23,6 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional, Tuple
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -58,6 +57,7 @@ CHORD_TOKEN_RE = re.compile(
 # Utilities
 # ---------------------------------------------------------------------------
 
+
 def clamp_int(x: int, lo: int, hi: int) -> int:
     """Clamp integer x to [lo, hi]."""
     return max(lo, min(hi, x))
@@ -75,6 +75,7 @@ def pc_to_midi(pc: int, octave: int) -> int:
 # Token-level parsing
 # ---------------------------------------------------------------------------
 
+
 def parse_root_pc(token: str) -> int:
     """
     Extract root pitch class (0=C..11=B) from a chord token string.
@@ -88,11 +89,13 @@ def parse_root_pc(token: str) -> int:
         raise ValueError(f"Could not parse chord token: {token!r}")
 
     root = m.group("root").upper()
-    accidental = (m.group("accidental") or "")
+    accidental = m.group("accidental") or ""
 
     base_pc = NOTE_TO_PC.get(root)
     if base_pc is None:
-        raise ValueError(f"Unsupported chord root letter: {root!r} (from token {token!r})")
+        raise ValueError(
+            f"Unsupported chord root letter: {root!r} (from token {token!r})"
+        )
 
     acc = accidental.lower()
     offset = acc.count("#") - acc.count("b")
@@ -108,21 +111,21 @@ def parse_bass_pc(token: str) -> Optional[int]:
     token = token.strip()
     if not token:
         return None
-        
+
     m = CHORD_TOKEN_RE.match(token)
     if not m or not m.group("bass"):
         return None
-        
+
     bass = m.group("bass").upper()
-    accidental = (m.group("bass_accidental") or "")
-    
+    accidental = m.group("bass_accidental") or ""
+
     base_pc = NOTE_TO_PC.get(bass)
     if base_pc is None:
         return None
-        
+
     acc = accidental.lower()
     offset = acc.count("#") - acc.count("b")
-    
+
     return (base_pc + offset) % 12
 
 
@@ -159,7 +162,9 @@ def parse_quality(token: str) -> str:
         return "min"
     if q_stripped.startswith("min"):
         return "min"
-    if q_stripped.startswith("m") and not (q_stripped.startswith("maj") or q_stripped.startswith("major")):
+    if q_stripped.startswith("m") and not (
+        q_stripped.startswith("maj") or q_stripped.startswith("major")
+    ):
         return "min"
 
     return "maj"
@@ -169,16 +174,17 @@ def parse_quality(token: str) -> str:
 # Triad construction
 # ---------------------------------------------------------------------------
 
+
 def triad_pcs(root_pc: int, quality: str) -> List[int]:
     """
     Return [root, 3rd, 5th] intervals for various chord qualities.
     Used for Arpeggios and Pads.
     """
     intervals = {
-        "maj":  [0, 4, 7],
-        "min":  [0, 3, 7],
-        "dim":  [0, 3, 6],
-        "aug":  [0, 4, 8],
+        "maj": [0, 4, 7],
+        "min": [0, 3, 7],
+        "dim": [0, 3, 6],
+        "aug": [0, 4, 8],
         "sus2": [0, 2, 7],
         "sus4": [0, 5, 7],
     }
@@ -252,7 +258,9 @@ def parse_progression_full(prog: str) -> List[List[Tuple[int, str, Optional[int]
         toks = _tokenize_bar(bar)
         if not toks:
             continue
-        out.append([(parse_root_pc(t), parse_quality(t), parse_bass_pc(t)) for t in toks])
+        out.append(
+            [(parse_root_pc(t), parse_quality(t), parse_bass_pc(t)) for t in toks]
+        )
     return out
 
 
