@@ -46,3 +46,6 @@ song_config.yaml
 *.swo
 # Local Codex metadata
 .claude/
+
+# Local pre-release review tracking (not for publication)
+REVIEW_TICKETS.md

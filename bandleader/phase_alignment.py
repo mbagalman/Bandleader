@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.io import wavfile
+from scipy.signal import correlate as _sp_correlate
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,9 @@ class LagEstimate:
     lag_ms: float
     confidence: float
     peak_correlation: float
+    # True when a negative correlation peak is stronger than the best positive
+    # one — a time shift cannot fix that (likely polarity inversion).
+    polarity_suspect: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,7 +163,10 @@ def estimate_lag(
     if denom < 1e-8:
         return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
 
-    corr = np.correlate(tgt_w, ref_w, mode="full") / denom
+    # FFT-based correlation: O(N log N) instead of O(N^2), which makes
+    # full-length stems (minutes of 48 kHz audio) practical. Values match
+    # direct correlation up to float rounding.
+    corr = _sp_correlate(tgt_w, ref_w, mode="full", method="fft") / denom
     lags = np.arange(-n + 1, n, dtype=np.int32)
 
     max_shift_samples = int(round(float(max_shift_ms) * sample_rate / 1000.0))
@@ -170,27 +177,58 @@ def estimate_lag(
     if bounded_corr.size == 0:
         return LagEstimate(lag_samples=0, lag_ms=0.0, confidence=0.0, peak_correlation=0.0)
 
-    abs_corr = np.abs(bounded_corr)
-    best_idx = int(np.argmax(abs_corr))
-    best_lag = int(bounded_lags[best_idx])
-    best_abs_corr = float(abs_corr[best_idx])
-    best_signed_corr = float(bounded_corr[best_idx])
+    # Polarity policy: only POSITIVE correlation peaks are alignment
+    # candidates. Time-shifting cannot fix an inverted-polarity target, and a
+    # strong negative peak (e.g. target == -reference) must not be reported
+    # as a confident match — it would shift periodic material toward
+    # cancellation instead of coherence.
+    pos_corr = np.maximum(bounded_corr, 0.0)
+    best_idx = int(np.argmax(pos_corr))
+    best_corr = float(pos_corr[best_idx])
+    strongest_negative = float(max(0.0, -float(np.min(bounded_corr))))
+    polarity_suspect = strongest_negative > best_corr
 
-    if abs_corr.size > 1:
-        second_best = float(np.partition(abs_corr, -2)[-2])
+    if best_corr <= 1e-12:
+        # No positively-correlated lag in bounds. Report the strongest peak
+        # by magnitude (likely negative) for diagnostics, with zero
+        # confidence so the apply gate always skips.
+        mag_idx = int(np.argmax(np.abs(bounded_corr)))
+        mag_lag = int(bounded_lags[mag_idx])
+        return LagEstimate(
+            lag_samples=mag_lag,
+            lag_ms=(mag_lag * 1000.0) / sample_rate,
+            confidence=0.0,
+            peak_correlation=float(bounded_corr[mag_idx]),
+            polarity_suspect=polarity_suspect,
+        )
+
+    best_lag = int(bounded_lags[best_idx])
+
+    if pos_corr.size > 1:
+        # Exclude a small neighborhood around the winning lag so the
+        # "uniqueness" term compares against genuinely different lags, not
+        # the adjacent samples of the same smooth correlation peak (which
+        # would make the contrast term always ~0).
+        exclusion = max(1, pos_corr.size // 20)
+        masked = pos_corr.copy()
+        lo = max(0, best_idx - exclusion)
+        hi = min(pos_corr.size, best_idx + exclusion + 1)
+        masked[lo:hi] = 0.0
+        second_best = float(masked.max())
     else:
         second_best = 0.0
-    peak_contrast = max(0.0, (best_abs_corr - second_best) / (best_abs_corr + 1e-12))
+    peak_contrast = max(0.0, (best_corr - second_best) / (best_corr + 1e-12))
 
-    # Confidence blends absolute match strength with uniqueness of the winning lag.
-    confidence = float(np.clip((0.75 * best_abs_corr) + (0.25 * peak_contrast), 0.0, 1.0))
+    # Confidence blends positive match strength with uniqueness of the winning lag.
+    confidence = float(np.clip((0.75 * best_corr) + (0.25 * peak_contrast), 0.0, 1.0))
     lag_ms = (best_lag * 1000.0) / sample_rate
 
     return LagEstimate(
         lag_samples=best_lag,
         lag_ms=lag_ms,
         confidence=confidence,
-        peak_correlation=best_signed_corr,
+        peak_correlation=best_corr,
+        polarity_suspect=polarity_suspect,
     )
 
 
@@ -226,9 +264,17 @@ def align_wav_to_reference(
         max_shift_ms=float(max_shift_ms),
     )
     if estimate.confidence < float(min_confidence):
+        if estimate.polarity_suspect:
+            reason = (
+                f"low confidence ({estimate.confidence:.3f} < {float(min_confidence):.3f}); "
+                "a negative correlation peak dominates — possible polarity inversion, "
+                "which a time shift cannot fix"
+            )
+        else:
+            reason = f"low confidence ({estimate.confidence:.3f} < {float(min_confidence):.3f})"
         return AlignmentResult(
             applied=False,
-            reason=f"low confidence ({estimate.confidence:.3f} < {float(min_confidence):.3f})",
+            reason=reason,
             lag_samples=estimate.lag_samples,
             lag_ms=estimate.lag_ms,
             confidence=estimate.confidence,

@@ -1,23 +1,6 @@
 #!/usr/bin/env python3
 """
-Safe Stem Cleaner v2.0 (FFmpeg-based, 80/20, do-no-harm defaults)
-
-Changelog (v2.0):
-- PACKAGE: Moved into bandleader package.
-- FEATURE: Added --wav flag to explicitly force WAV output (useful when caller may pass
-  a non-.wav output path).
-- FEATURE: ffmpeg command written to <output>.ffmpeg.txt alongside each output file,
-  providing an audit trail for reproducibility.
-- LOGGING: Replaced print() with Python logging. Use --verbose / -v for debug output.
-
-v1.4 (2026-01-21):
-  - Fix: Applied loudnorm GLOBALLY (after dry/wet mix) to ensure accurate target LUFS.
-  - Fix: Added `normalize=0` to amix filter to prevent 6dB volume drop on mix.
-  - Refactor: Cleaned up signal chain logic for better separation of concerns.
-
-v1.3:
-  - Fix: Converted compressor threshold/makeup to linear values.
-  - UX: Added dry/wet mix and preview mode.
+Safe stem cleaner (FFmpeg-based, 80/20, do-no-harm defaults).
 
 Philosophy:
 - Improve common "fuzzy stem" issues (rumble, hiss/fizz, uneven level) without changing musical intent.
@@ -40,6 +23,7 @@ Batch processing (bash):
 
 import argparse
 import logging
+import shlex
 import shutil
 import subprocess
 import sys
@@ -272,8 +256,10 @@ def build_wet_chain(
         parts.append(f"lowpass=f={lpf_hz}")
 
     # De-ess (optional)
+    # ffmpeg deesser params: i = intensity (0-1), f = frequency as a fraction
+    # of the sibilance band (0-1, NOT Hz), s = output source enum (i/o/e).
     if enable_deess:
-        parts.append("deesser=i=0.20:f=5500:s=0.6")
+        parts.append("deesser=i=0.2:f=0.5:s=o")
 
     # Compressor
     # Convert dB presets to LINEAR for FFmpeg acompressor
@@ -373,28 +359,41 @@ def run_ffmpeg(
     if sample_rate:
         cmd += ["-ar", str(sample_rate)]
 
-    cmd.append(str(output_path))
-
-    # Write command + settings to log file for reproducibility
-    if log_path is not None:
-        try:
-            lines = []
-            if audit_metadata:
-                for key, val in audit_metadata.items():
-                    lines.append(f"# {key}: {val}")
-            lines.append(" ".join(cmd))
-            log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            log.debug("ffmpeg command written to: %s", log_path)
-        except OSError as e:
-            log.debug("Could not write ffmpeg log file: %s", e)
+    # Resolve to an absolute path so a filename starting with '-' cannot be
+    # parsed as an ffmpeg option (the output is a bare positional argument).
+    cmd.append(str(Path(output_path).resolve()))
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         err = proc.stderr.strip() or "Unknown ffmpeg error"
         raise RuntimeError(err)
 
+    # Write command + settings to the audit file only after ffmpeg succeeds,
+    # so a leftover audit log always reflects a run that actually produced
+    # the output. shlex quoting keeps paths with spaces replayable.
+    if log_path is not None:
+        try:
+            lines = []
+            if audit_metadata:
+                for key, val in audit_metadata.items():
+                    lines.append(f"# {key}: {val}")
+            lines.append(shlex.join(cmd))
+            log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            log.debug("ffmpeg command written to: %s", log_path)
+        except OSError as e:
+            log.debug("Could not write ffmpeg log file: %s", e)
+
 
 def main() -> None:
+    """Console-script entry point: run with friendly fatal-error reporting."""
+    try:
+        _run_cli()
+    except Exception as e:
+        log.error("Error: %s", e)
+        sys.exit(1)
+
+
+def _run_cli() -> None:
     parser = argparse.ArgumentParser(description="Safe stem cleaner using ffmpeg with conservative presets.")
     parser.add_argument("input_file", help="Input audio file")
     parser.add_argument("--stem", choices=["vocal", "guitar", "bass", "other"], default="other")
@@ -529,7 +528,12 @@ def main() -> None:
     except RuntimeError as e:
         msg = str(e)
         if enable_deess and ("deesser" in msg or "No such filter" in msg or "not found" in msg):
-            log.warning("FFmpeg error with deesser. Retrying without de-essing...")
+            log.warning(
+                "FFmpeg failed with the deesser filter (likely missing from this "
+                "ffmpeg build). Retrying WITHOUT de-essing — output will not be "
+                "de-essed. FFmpeg error was: %s",
+                msg,
+            )
             # Rebuild without deess
             wet_retry = build_wet_chain(preset, enable_deess=False, force_lpf=force_lpf)
             filter_retry = build_final_filter(wet_retry, mix=float(args.mix))
@@ -557,8 +561,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        log.error("Error: %s", e)
-        sys.exit(1)
+    main()

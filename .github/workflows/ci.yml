@@ -10,14 +10,42 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Python ${{ matrix.python-version }}
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: python -m pip install ruff
+
+      - name: Run ruff
+        run: python -m ruff check bandleader tests
+
+  test:
+    name: Python ${{ matrix.python-version }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # README documents Windows and macOS support; cover one current
+          # Python on each rather than the full matrix.
+          - os: windows-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.12"
 
     steps:
       - name: Check out repository

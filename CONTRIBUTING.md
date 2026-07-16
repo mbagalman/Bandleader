@@ -1,39 +1,41 @@
 # Contributing to Bandleader
 
+Thanks for your interest in improving Bandleader! Bug reports, fixes, and
+feature ideas are all welcome.
+
 ## Setup
 
 1. Use Python 3.10+.
-2. Install dependencies:
+2. Fork and clone the repository, then install in editable mode:
 ```bash
 pip install -e .
+pip install pytest
 ```
-3. Optional drum transcription dependency:
+3. Verify everything works:
 ```bash
-pip install -e ".[drums]"
-```
-4. Verify local checks:
-```bash
-python3 -m pytest -q
+python -m pytest -q
 ```
 
-## Workflow
+Some features shell out to system tools. For full end-to-end runs you also
+need FFmpeg and FluidSynth on your PATH (see the [README](README.md)), but
+the test suite runs without them.
 
-1. Check [bandleader-workboard.md](bandleader-workboard.md) before starting.
-2. Claim your ticket in the Dashboard by setting `Status` to `Claimed` and `Claimed by` to your name.
-3. Keep changes scoped to the claimed ticket(s).
-4. If you pause mid-ticket, leave a short `Progress note` with exact remaining work.
-5. Mark ticket `Done` and update acceptance checkboxes when complete.
+## Making Changes
 
-## Coding and Testing Expectations
+1. Open an issue first for anything non-trivial so we can discuss the approach.
+2. Create a feature branch from `main`.
+3. Keep changes focused — one logical change per pull request.
+4. Add or update tests for behavior changes.
+5. Keep user-facing errors actionable and specific.
+6. Run `python -m pytest -q` before opening the PR.
 
-1. Add or update tests for behavior changes.
-2. Keep user-facing errors actionable and specific.
-3. Run `python3 -m pytest -q` before handing off.
-4. Note any environment limitations (missing tools, missing optional deps) in your handoff.
+## Pull Requests
+
+1. Describe what changed and why; link the related issue if there is one.
+2. Note any environment limitations you hit (missing tools, missing optional deps).
+3. CI must pass before review.
 
 ## Commit Guidance
 
-1. Use one commit per logical ticket or tightly related ticket set.
-2. Commit message format recommendation:
+Commit message format recommendation:
 `feat(orchestrator): ...`, `fix(generators): ...`, `docs(readme): ...`.
-3. Reference ticket IDs from `bandleader-workboard.md` in commit body when useful.

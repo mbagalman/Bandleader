@@ -168,3 +168,67 @@ def test_align_wav_to_reference_handles_uint8_roundtrip(tmp_path):
     out_sr, out_audio = wavfile.read(out_path)
     assert out_sr == sr
     assert out_audio.dtype == np.uint8
+
+
+def test_estimate_lag_rejects_polarity_inverted_target():
+    # Regression (R28): a target that is exactly -reference once scored
+    # near-perfect confidence because the search used abs(correlation), and
+    # the apply path would have "aligned" it without fixing polarity.
+    sr = 48_000
+    rng = np.random.default_rng(5)
+    reference = rng.normal(0.0, 0.25, size=4096).astype(np.float32)
+
+    result = estimate_lag(reference, -reference, sample_rate=sr, max_shift_ms=5.0)
+
+    assert result.confidence < 0.35
+    assert result.polarity_suspect is True
+
+
+def test_estimate_lag_negative_peak_stronger_than_positive_is_not_confident():
+    # A delayed, polarity-inverted copy has a strong negative peak at the true
+    # lag and only weak positive peaks elsewhere; it must not win.
+    sr = 48_000
+    delay = 50
+    rng = np.random.default_rng(6)
+    reference = rng.normal(0.0, 0.25, size=4096).astype(np.float32)
+    target = -np.concatenate([np.zeros(delay, dtype=np.float32), reference[:-delay]])
+
+    result = estimate_lag(reference, target, sample_rate=sr, max_shift_ms=5.0)
+
+    assert result.confidence < 0.35
+    assert result.polarity_suspect is True
+
+
+def test_align_wav_to_reference_skips_polarity_inverted_target(tmp_path):
+    sr = 48_000
+    rng = np.random.default_rng(8)
+    reference = rng.normal(0.0, 0.25, size=4096).astype(np.float32)
+
+    ref_path = tmp_path / "ref.wav"
+    tgt_path = tmp_path / "tgt.wav"
+    out_path = tmp_path / "aligned.wav"
+    wavfile.write(ref_path, sr, reference)
+    wavfile.write(tgt_path, sr, -reference)
+
+    result = align_wav_to_reference(
+        ref_path, tgt_path, out_path, max_shift_ms=5.0, min_confidence=0.35
+    )
+    assert result.applied is False
+    assert "polarity" in result.reason
+    assert not out_path.exists()
+
+
+def test_estimate_lag_scales_to_long_stems():
+    # Regression (R29): direct full correlation was O(N^2) and took hours on
+    # song-length stems. FFT correlation must find the same lag and stay fast
+    # (this 30-second stem completes in well under the pytest default budget).
+    sr = 48_000
+    delay = 100
+    rng = np.random.default_rng(9)
+    reference = rng.normal(0.0, 0.25, size=sr * 30).astype(np.float32)
+    target = np.concatenate([np.zeros(delay, dtype=np.float32), reference[:-delay]])
+
+    result = estimate_lag(reference, target, sample_rate=sr, max_shift_ms=5.0)
+
+    assert result.lag_samples == delay
+    assert result.confidence > 0.7

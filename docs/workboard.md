@@ -1,12 +1,10 @@
-# Bandleader — Development Plan & Ticket Pack
+# Bandleader — Development Plan & Ticket Pack (Historical)
 
-Tracks coordinated work for the Bandleader project.
-
-**Rules for contributors:**
-1. Before starting a ticket, set its `Status` to `Claimed` and fill in `Claimed by`.
-2. When done, check the dashboard item and set `Status` to `Done`.
-3. Do not start any ticket already marked `Claimed` by someone else without coordinating first.
-4. If you pause mid-ticket, leave a short `Progress note` so the next session can continue quickly.
+> **Note:** This is the historical internal workboard from Bandleader's
+> pre-release development (all tickets completed before v0.1.0). It is kept
+> for reference. For the current contribution workflow, see
+> [CONTRIBUTING.md](../CONTRIBUTING.md); for planned features, see the
+> [roadmap](roadmap.md).
 
 ---
 

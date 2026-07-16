@@ -1,14 +1,8 @@
 """
-Drum Transcription and Re-synthesis Tool v2.0 (Revised + BPM-friendly)
-
-Changelog (v2.0):
-- PACKAGE: Moved into bandleader package.
-- FIX: Replaced bare `except Exception: pass` in choose_tempo_bpm() with a logged warning.
-  Silent swallowing of exceptions hid real bugs; now failures are visible in --verbose output.
-- LOGGING: Replaced print() with Python logging. Use --verbose / -v for debug output.
+Drum transcription and re-synthesis tool.
 
 This script takes a "fuzzy" drum track (WAV or MP3) and creates a clean version by:
-1) Transcribing drum hits (timing, drum type, velocity)
+1) Transcribing drum hits (timing, drum type, velocity) via onset detection
 2) Generating a MIDI file from the transcription
 3) Rendering the MIDI file with a clean drum soundfont using FluidSynth
 
@@ -18,7 +12,7 @@ Key timing detail:
   If you know the song BPM, pass --tempo for best alignment and correct playback speed.
 
 Requirements:
-    pip install madmom mido numpy librosa pydub
+    pip install mido numpy librosa pydub
 
 FluidSynth must be installed:
     - macOS: brew install fluid-synth
@@ -33,6 +27,7 @@ import os
 import sys
 import argparse
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -47,14 +42,6 @@ try:
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
-
-try:
-    from madmom.features.drums import RNNDrumProcessor
-    from madmom.features.onsets import PeakPickingProcessor
-    MADMOM_AVAILABLE = True
-except (ImportError, OSError):
-    # OSError catches missing system DLLs (common on Windows for libsndfile)
-    MADMOM_AVAILABLE = False
 
 try:
     import librosa
@@ -77,15 +64,17 @@ DRUM_MAPPING = {
 }
 
 
-def convert_to_wav(input_file: str) -> str:
+def convert_to_wav(input_file: str) -> tuple[str, bool]:
     """
     Convert MP3 or other formats to WAV if needed.
-    Returns a path to a WAV file (may be original file if already WAV).
+    Returns (wav_path, created_temp). created_temp is True only when this
+    function wrote a new temporary file that the caller should delete;
+    the original input file is never flagged for deletion.
     """
     input_path = Path(input_file)
 
     if input_path.suffix.lower() == '.wav':
-        return str(input_file)
+        return str(input_file), False
 
     if not PYDUB_AVAILABLE:
         log.warning(
@@ -93,14 +82,19 @@ def convert_to_wav(input_file: str) -> str:
             "Proceeding with original file: %s",
             input_path.suffix, input_file
         )
-        return str(input_file)
+        return str(input_file), False
 
     log.info("Converting %s to WAV...", input_file)
     audio = AudioSegment.from_file(input_file)
-    wav_path = input_path.with_suffix('.temp.wav')
-    audio.export(wav_path, format='wav')
-    log.info("Converted to %s", wav_path)
-    return str(wav_path)
+    # Unique temp path: a fixed sibling name could overwrite a pre-existing
+    # file (then delete it during cleanup) and races between concurrent runs.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f"{input_path.stem}_", suffix=".temp.wav", dir=str(input_path.parent)
+    )
+    os.close(fd)
+    audio.export(tmp_name, format='wav')
+    log.info("Converted to %s", tmp_name)
+    return tmp_name, True
 
 
 def estimate_tempo_bpm(audio_file: str) -> float:
@@ -114,8 +108,9 @@ def estimate_tempo_bpm(audio_file: str) -> float:
     y, sr = librosa.load(audio_file, sr=None)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
 
-    # librosa.beat.tempo returns an array in newer versions
-    tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)
+    # librosa.feature.tempo is the non-deprecated home of tempo estimation
+    # (librosa.beat.tempo is deprecated); it returns an array.
+    tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)
     bpm = float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
     return bpm
 
@@ -193,71 +188,9 @@ def choose_tempo_bpm(audio_file: str, user_bpm: float | None) -> float:
     return est_clamped
 
 
-def transcribe_drums_madmom(audio_file: str, threshold: float = 0.5, min_gap: int = 5):
-    """
-    Transcribe drums using madmom's RNN-based drum transcription.
-    - Detects: kick, snare, closed_hat
-    - PeakPickingProcessor with fps returns times in seconds
-    - Mild gamma curve for velocity to help fuzzy AI stems
-
-    Returns: list of (time_seconds, drum_name, velocity_int)
-    """
-    if not MADMOM_AVAILABLE:
-        raise ImportError("madmom is required for this method. Install with: pip install madmom")
-
-    log.info("Transcribing drums from %s using madmom...", audio_file)
-
-    rnn_processor = RNNDrumProcessor()
-    activations = rnn_processor(audio_file)  # shape: (frames, channels)
-
-    drum_names = ['kick', 'snare', 'closed_hat']
-    if getattr(activations, "ndim", None) != 2:
-        raise RuntimeError(f"Unexpected activations shape from madmom: {getattr(activations, 'shape', None)}")
-
-    if activations.shape[1] != len(drum_names):
-        log.warning(
-            "Model output has %d channels, expected %d. Truncating to minimum.",
-            activations.shape[1], len(drum_names)
-        )
-        limit = min(activations.shape[1], len(drum_names))
-        drum_names = drum_names[:limit]
-
-    fps = 100
-    peak_picker = PeakPickingProcessor(
-        threshold=threshold,
-        pre_max=min_gap,
-        post_max=min_gap,
-        fps=fps
-    )
-
-    drum_events = []
-
-    for drum_idx, drum_name in enumerate(drum_names):
-        channel_activations = activations[:, drum_idx]
-        peak_times = peak_picker(channel_activations)  # seconds
-
-        for peak_time in peak_times:
-            t = float(peak_time)
-            frame_idx = int(round(t * fps))
-            frame_idx = max(0, min(frame_idx, activations.shape[0] - 1))
-
-            confidence = float(activations[frame_idx, drum_idx])
-            confidence = float(np.clip(confidence, 0.0, 1.0))
-
-            # Gamma correction for velocity (boost mids)
-            velocity_float = (confidence ** 0.5) * 127.0
-            velocity = int(min(127, velocity_float))
-            velocity = max(40, velocity)
-
-            drum_events.append((t, drum_name, velocity))
-
-    log.info("Found %d drum hits (madmom)", len(drum_events))
-    return drum_events
-
-
 def transcribe_drums_basic(audio_file: str):
     """
-    Fallback: Basic onset detection using librosa.
+    Basic onset detection using librosa.
     Approx drum-type classification via spectral centroid.
 
     Returns: list of (time_seconds, drum_name, velocity_int)
@@ -402,9 +335,6 @@ def main():
     parser.add_argument('--tempo', '-t', type=float, default=None,
                         help='Tempo in BPM. Strongly recommended if known (better alignment + playback speed).')
     parser.add_argument('--gain', '-g', type=float, default=0.5, help='Output gain 0.0-1.0')
-    parser.add_argument('--method', choices=['madmom', 'basic'], default='madmom', help='Transcription method')
-    parser.add_argument('--threshold', type=float, default=0.5, help='Detection threshold (madmom peak picking)')
-    parser.add_argument('--min-gap', type=int, default=5, help='Minimum frames between hits (madmom peak picking)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug output')
     args = parser.parse_args()
 
@@ -417,10 +347,11 @@ def main():
     # Emit availability warnings now that logging is set up
     if not PYDUB_AVAILABLE:
         log.warning("pydub not available. MP3 conversion may be limited.")
-    if not MADMOM_AVAILABLE:
-        log.warning("madmom not available. Will try basic onset detection.")
 
     input_path = Path(args.input_file)
+    if not input_path.exists():
+        log.error("Input file not found: %s", input_path)
+        sys.exit(1)
     output_path = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_clean.wav")
     midi_path = Path(args.midi_output) if args.midi_output else input_path.with_suffix('.mid')
 
@@ -428,34 +359,18 @@ def main():
     created_temp = False
 
     try:
-        wav_file = convert_to_wav(args.input_file)
-        created_temp = wav_file.endswith('.temp.wav')
+        wav_file, created_temp = convert_to_wav(args.input_file)
 
         # Decide tempo: user override beats auto-estimate (but we warn if wildly different)
         tempo_bpm = choose_tempo_bpm(wav_file, args.tempo)
         log.info("Using tempo for MIDI/playback: %.1f BPM", tempo_bpm)
 
         # Transcribe
-        if args.method == 'madmom':
-            if not MADMOM_AVAILABLE:
-                log.warning("madmom requested but not available; falling back to basic onset detection.")
-                drum_events = transcribe_drums_basic(wav_file)
-            else:
-                drum_events = transcribe_drums_madmom(
-                    wav_file,
-                    threshold=args.threshold,
-                    min_gap=args.min_gap
-                )
-                # 80/20: if madmom yields nothing, auto-fallback
-                if not drum_events:
-                    log.warning("madmom found 0 hits; falling back to basic onset detection.")
-                    drum_events = transcribe_drums_basic(wav_file)
-        else:
-            drum_events = transcribe_drums_basic(wav_file)
+        drum_events = transcribe_drums_basic(wav_file)
 
         if not drum_events:
-            log.warning("No drum hits detected!")
-            return
+            log.error("No drum hits detected; no output written.")
+            sys.exit(1)
 
         create_midi(drum_events, str(midi_path), tempo_bpm=tempo_bpm)
         render_midi_with_fluidsynth(str(midi_path), args.soundfont, str(output_path), gain=args.gain)
@@ -468,8 +383,9 @@ def main():
 
     except Exception as e:
         log.error("Error: %s", e)
-        import traceback
-        traceback.print_exc()
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
     finally:

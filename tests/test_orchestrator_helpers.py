@@ -1,26 +1,11 @@
-import types
-
 import pytest
+
+import bandleader.bandleader as _orchestrator
 
 
 def _load_orchestrator_namespace():
-    """
-    Load bandleader/bandleader.py under Python 3.9 by injecting postponed annotations.
-    This keeps tests runnable in this sandbox while project runtime target remains >=3.10.
-    """
-    with open("bandleader/bandleader.py", "r", encoding="utf-8") as f:
-        source = f.read()
-
-    source = "from __future__ import annotations\n" + source
-    namespace = {"__name__": "bandleader.bandleader"}
-    fake_yaml = types.SimpleNamespace(safe_load=lambda *_args, **_kwargs: {})
-    namespace["yaml"] = fake_yaml
-
-    import sys
-
-    sys.modules.setdefault("yaml", fake_yaml)
-    exec(compile(source, "bandleader/bandleader.py", "exec"), namespace)
-    return namespace
+    """Expose the orchestrator module namespace dict to the existing tests."""
+    return vars(_orchestrator)
 
 
 def test_find_file_prefers_exact_wav_and_skips_generated(tmp_path):
@@ -516,3 +501,105 @@ def test_build_preview_mix_filter_rejects_zero_inputs():
 
     with pytest.raises(ValueError):
         build_preview_mix_filter(0)
+
+
+def test_load_config_reports_malformed_yaml_without_traceback(tmp_path):
+    ns = _load_orchestrator_namespace()
+    load_config = ns["load_config"]
+
+    (tmp_path / "song_config.yaml").write_text(
+        "song:\n  bpm: 120\n bad_indent: [unclosed\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit):
+        load_config(tmp_path)
+
+
+def test_load_config_reads_valid_yaml(tmp_path):
+    ns = _load_orchestrator_namespace()
+    load_config = ns["load_config"]
+
+    (tmp_path / "song_config.yaml").write_text(
+        'song:\n  bpm: 120\n  progression: "Am | F"\n  bars: 8\n', encoding="utf-8"
+    )
+    config = load_config(tmp_path)
+    assert config["song"]["bpm"] == 120
+
+
+def test_validate_config_rejects_boolean_bpm_and_bars():
+    ns = _load_orchestrator_namespace()
+    validate_config = ns["validate_config"]
+
+    # bool is an int subclass; bpm: true must not validate as bpm=1.
+    bad = {"song": {"bpm": True, "progression": "Am | F", "bars": True}}
+    with pytest.raises(SystemExit):
+        validate_config(bad)
+
+
+def test_validate_config_defaults_and_validates_seed():
+    ns = _load_orchestrator_namespace()
+    validate_config = ns["validate_config"]
+
+    cfg = {"song": {"bpm": 120, "progression": "Am | F", "bars": 8}}
+    normalized = validate_config(cfg)
+    assert normalized["song"]["seed"] == 0
+
+    cfg = {"song": {"bpm": 120, "progression": "Am | F", "bars": 8, "seed": 42}}
+    assert validate_config(cfg)["song"]["seed"] == 42
+
+    bad = {"song": {"bpm": 120, "progression": "Am | F", "bars": 8, "seed": "abc"}}
+    with pytest.raises(SystemExit):
+        validate_config(bad)
+
+
+def test_select_alignment_preview_source_policy(tmp_path):
+    # Regression (R31): a skipped secondary alignment used to drop the target
+    # stem from the preview entirely; the dry target must be used instead.
+    ns = _load_orchestrator_namespace()
+    select = ns["select_alignment_preview_source"]
+    AlignmentResult = ns["AlignmentResult"]
+
+    def result(applied):
+        return AlignmentResult(
+            applied=applied, reason="x", lag_samples=0, lag_ms=0.0,
+            confidence=0.0, peak_correlation=0.0, output_path=None,
+        )
+
+    aligned = tmp_path / "aligned.wav"
+    dry = tmp_path / "dry.wav"
+    dry.write_bytes(b"RIFF")
+
+    # Skip -> dry target is kept in the preview.
+    assert select(result(False), aligned, dry) == dry
+    # Applied with existing output -> aligned variant wins.
+    aligned.write_bytes(b"RIFF")
+    assert select(result(True), aligned, dry) == aligned
+    # Applied but output missing -> fall back to dry.
+    aligned.unlink()
+    assert select(result(True), aligned, dry) == dry
+    # Nothing available -> None.
+    assert select(result(False), aligned, tmp_path / "missing.wav") is None
+    assert select(result(False), aligned, None) is None
+
+
+def test_run_phase_alignment_pair_skips_non_wav_target(tmp_path):
+    import numpy as np
+    from scipy.io import wavfile
+
+    ns = _load_orchestrator_namespace()
+    run_phase_alignment_pair = ns["run_phase_alignment_pair"]
+
+    sr = 48_000
+    ref_path = tmp_path / "ref.wav"
+    wavfile.write(ref_path, sr, np.zeros(1024, dtype=np.float32))
+    mp3_target = tmp_path / "guitars.mp3"
+    mp3_target.write_bytes(b"ID3fakemp3data")
+
+    result = run_phase_alignment_pair(
+        "TestPair",
+        ref_path,
+        mp3_target,
+        tmp_path / "aligned.wav",
+        {"max_shift_ms": 5.0, "min_confidence": 0.3},
+    )
+    assert result.applied is False
+    assert "not a WAV file" in result.reason

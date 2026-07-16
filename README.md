@@ -55,10 +55,6 @@ You need:
 - FluidSynth
 - At least one `.sf2` soundfont for rendered MIDI parts
 
-Optional:
-
-- `madmom` for better drum transcription
-
 ### Install System Tools
 
 macOS:
@@ -88,12 +84,6 @@ Clone the repo and install it in editable mode:
 git clone https://github.com/mbagalman/Bandleader.git
 cd Bandleader
 pip install -e .
-```
-
-Optional drum transcription extra:
-
-```bash
-pip install -e ".[drums]"
 ```
 
 If your system does not expose `pip` directly, use:
@@ -177,7 +167,6 @@ soundfonts:
 pipeline:
   clean_drums:
     enabled: true
-    use_madmom: false
     export_sidechain_trigger: false
 
   clean_vocals:
@@ -218,7 +207,7 @@ Important config ideas:
 
 `clean_drums`
 
-Re-synthesizes the drum stem from detected hits. With `use_madmom: false`, Bandleader uses the default librosa-based fallback. With `use_madmom: true`, it uses the optional neural-net detector.
+Re-synthesizes the drum stem from detected hits using librosa onset detection.
 
 `clean_vocals`
 
@@ -297,6 +286,8 @@ Pad mode uses chord-set voice leading to minimize movement and avoid voice cross
 
 `bandleader-bass` and `bandleader-arp` are deterministic when you pass an explicit `--seed`.
 
+The orchestrator always passes `song.seed` (default `0`) to both generators, so repeated `bandleader` runs with the same config produce identical MIDI output.
+
 Use the same progression, options, and seed to reproduce the same MIDI output between runs.
 
 Time-signature handling uses denominator-aware bar sizing:
@@ -331,7 +322,7 @@ Use it only on monophonic material. Polyphonic pads and chords are outside its i
 
 - [Roadmap](docs/roadmap.md)
 - [Release checklist](docs/release-checklist.md)
-- [Development workboard](docs/workboard.md)
+- [Development workboard (historical)](docs/workboard.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 

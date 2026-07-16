@@ -39,7 +39,7 @@ dependencies = [
     "pyyaml",
     "numpy",
     "scipy",
-    "librosa",
+    "librosa>=0.10",
     "pydub",
 ]
 
@@ -48,12 +48,6 @@ Homepage = "https://github.com/mbagalman/Bandleader"
 Repository = "https://github.com/mbagalman/Bandleader"
 Issues = "https://github.com/mbagalman/Bandleader/issues"
 Changelog = "https://github.com/mbagalman/Bandleader/blob/main/CHANGELOG.md"
-
-[project.optional-dependencies]
-# madmom is optional: drum_cleaner falls back to librosa if unavailable.
-# macOS: brew install libsndfile first
-# Linux: apt-get install libsndfile1-dev first
-drums = ["madmom"]
 
 [project.scripts]
 bandleader       = "bandleader.bandleader:main"

@@ -1,25 +1,9 @@
 #!/usr/bin/env python3
 """
-The Bandleader v2.3 (Orchestration Agent)
+Bandleader pipeline orchestrator.
 
-Changelog (v2.3):
-- FIX: Explicitly pass `--method basic` to drum_cleaner when `use_madmom` is false.
-- FIX: Pass `--overwrite` to stem_cleaner to ensure fresh outputs on re-runs.
-- FIX: Pass `--midi-output` to drum_cleaner so the MIDI file is saved in the generated/ directory.
-Changelog (v2.2):
-- FIX: Orchestrator now respects the exact CLI contracts of worker scripts.
-- FIX: Cleaners are passed explicit file outputs instead of directories.
-- FIX: Bass and Arp generators output MIDI, which the orchestrator then explicitly
-  renders to WAV using FluidSynth.
-- FIX: Added soundfonts configuration handling.
-- FIX: find_file() is now fully case-insensitive and recursive.
-- FIX: Propagates 'time_signature' config to arp and bass generators.
-
-Goal:
-- Automate the "Second-rate Backup Band" pipeline.
-- Read a single 'song_config.yaml' source of truth.
-- Process existing stems and generate new layers in one pass.
-- Render a preview mix for immediate QC.
+Reads a single 'song_config.yaml' source of truth, processes existing stems,
+generates new layers, and renders a preview mix in one pass.
 
 Usage:
   bandleader ./my_song_folder
@@ -33,6 +17,7 @@ import copy
 import re
 import json
 import yaml
+import shlex
 import subprocess
 import argparse
 import shutil
@@ -48,6 +33,7 @@ song:
   time_signature: 4/4
   progression: "Am G | F | C G"
   bars: 32
+  seed: 0
 
 stems:
   drums: "drums"
@@ -65,7 +51,6 @@ soundfonts:
 pipeline:
   clean_drums:
     enabled: true
-    use_madmom: false
     export_sidechain_trigger: false
 
   clean_vocals:
@@ -103,7 +88,7 @@ pipeline:
 # --- Helpers ---
 
 PIPELINE_DEFAULTS = {
-    "clean_drums": {"enabled": False, "use_madmom": False, "export_sidechain_trigger": False},
+    "clean_drums": {"enabled": False, "export_sidechain_trigger": False},
     "clean_vocals": {
         "enabled": False,
         "normalize": False,
@@ -148,8 +133,19 @@ def load_config(folder: Path) -> dict:
         log.info("Example config:\n%s", EXAMPLE_CONFIG.strip())
         sys.exit(1)
     with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+        try:
+            config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            log.error("Config error: %s is not valid YAML.", config_path)
+            log.error("%s", e)
+            log.error("Fix the YAML syntax (check indentation and quoting) and re-run.")
+            sys.exit(1)
     return config
+
+
+def _is_number(value) -> bool:
+    """True for int/float but not bool (bool is an int subclass in Python)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def validate_config(config: dict) -> dict:
@@ -189,7 +185,7 @@ def validate_config(config: dict) -> dict:
 
     if "bpm" not in song:
         add_error("song.bpm", "is required and must be a positive number (e.g. 120).")
-    elif not (isinstance(song["bpm"], (int, float)) and song["bpm"] > 0):
+    elif not (_is_number(song["bpm"]) and song["bpm"] > 0):
         add_error("song.bpm", f"must be a positive number, got {song['bpm']!r}.")
 
     if "progression" not in song:
@@ -199,8 +195,14 @@ def validate_config(config: dict) -> dict:
 
     if "bars" not in song:
         add_error("song.bars", "is required and must be a positive integer (e.g. 32).")
-    elif not (isinstance(song["bars"], int) and song["bars"] > 0):
+    elif not (isinstance(song["bars"], int) and not isinstance(song["bars"], bool) and song["bars"] > 0):
         add_error("song.bars", f"must be a positive integer, got {song['bars']!r}.")
+
+    seed = song.get("seed", 0)
+    if not (isinstance(seed, int) and not isinstance(seed, bool)):
+        add_error("song.seed", f"must be an integer, got {seed!r}.")
+        seed = 0
+    song["seed"] = seed
 
     ts = str(song.get("time_signature", "4/4")).strip()
     song["time_signature"] = ts
@@ -247,12 +249,6 @@ def validate_config(config: dict) -> dict:
             merged["enabled"] = bool(defaults["enabled"])
 
         if step == "clean_drums":
-            if not isinstance(merged.get("use_madmom"), bool):
-                add_error(
-                    "pipeline.clean_drums.use_madmom",
-                    f"must be true/false, got {merged.get('use_madmom')!r}.",
-                )
-                merged["use_madmom"] = defaults["use_madmom"]
             if not isinstance(merged.get("export_sidechain_trigger"), bool):
                 add_error(
                     "pipeline.clean_drums.export_sidechain_trigger",
@@ -268,7 +264,7 @@ def validate_config(config: dict) -> dict:
                 merged["normalize"] = defaults["normalize"]
             for key in ("target_lufs", "target_true_peak", "target_lra"):
                 val = merged.get(key, defaults[key])
-                if not isinstance(val, (int, float)):
+                if not _is_number(val):
                     add_error(
                         f"pipeline.clean_vocals.{key}",
                         f"must be a number, got {val!r}.",
@@ -292,7 +288,7 @@ def validate_config(config: dict) -> dict:
                 merged["sidechain_ducking"] = defaults["sidechain_ducking"]
 
             ducking_depth = merged.get("ducking_depth", defaults["ducking_depth"])
-            if not isinstance(ducking_depth, (int, float)) or not (0.0 <= float(ducking_depth) <= 1.0):
+            if not _is_number(ducking_depth) or not (0.0 <= float(ducking_depth) <= 1.0):
                 add_error(
                     "pipeline.generate_bass.ducking_depth",
                     f"must be a number between 0.0 and 1.0, got {ducking_depth!r}.",
@@ -303,7 +299,7 @@ def validate_config(config: dict) -> dict:
 
             for key in ("ducking_attack_ms", "ducking_release_ms"):
                 value = merged.get(key, defaults[key])
-                if not isinstance(value, (int, float)) or float(value) <= 0:
+                if not _is_number(value) or float(value) <= 0:
                     add_error(
                         f"pipeline.generate_bass.{key}",
                         f"must be a positive number, got {value!r}.",
@@ -328,7 +324,7 @@ def validate_config(config: dict) -> dict:
                 merged["motion"] = defaults["motion"]
         elif step == "phase_align":
             max_shift_ms = merged.get("max_shift_ms", defaults["max_shift_ms"])
-            if not isinstance(max_shift_ms, (int, float)) or float(max_shift_ms) <= 0:
+            if not _is_number(max_shift_ms) or float(max_shift_ms) <= 0:
                 add_error(
                     "pipeline.phase_align.max_shift_ms",
                     f"must be a positive number, got {max_shift_ms!r}.",
@@ -338,7 +334,7 @@ def validate_config(config: dict) -> dict:
                 merged["max_shift_ms"] = float(max_shift_ms)
 
             min_confidence = merged.get("min_confidence", defaults["min_confidence"])
-            if not isinstance(min_confidence, (int, float)) or not (0.0 <= float(min_confidence) <= 1.0):
+            if not _is_number(min_confidence) or not (0.0 <= float(min_confidence) <= 1.0):
                 add_error(
                     "pipeline.phase_align.min_confidence",
                     f"must be a number between 0.0 and 1.0, got {min_confidence!r}.",
@@ -376,16 +372,6 @@ def validate_config(config: dict) -> dict:
     return normalized
 
 
-def check_system_dependencies() -> None:
-    """Legacy global dependency check (kept for compatibility)."""
-    missing = [tool for tool in ["ffmpeg", "fluidsynth"] if not shutil.which(tool)]
-    if not missing:
-        return
-    log.error("Missing required system dependencies: %s", ", ".join(missing))
-    log.error("Please install them and ensure they are on your PATH.")
-    sys.exit(1)
-
-
 def ensure_tools_for_enabled_steps(pipe: dict) -> None:
     """
     Validate external tools for enabled steps only.
@@ -417,15 +403,21 @@ def ensure_tools_for_enabled_steps(pipe: dict) -> None:
 
 
 def get_soundfont(config: dict, folder: Path, key: str) -> str | None:
-    """Resolve soundfont path from config, relative to the song folder if needed."""
+    """Resolve soundfont path from config, relative to the song folder if needed.
+
+    Logs the specific failure cause (not configured vs configured-but-missing)
+    so callers only need a generic skip/abort message.
+    """
     sf_path_str = config.get("soundfonts", {}).get(key)
     if not sf_path_str:
+        log.warning("No '%s' soundfont configured (set soundfonts.%s in song_config.yaml).", key, key)
         return None
     sf_path = Path(sf_path_str)
     if not sf_path.is_absolute():
         sf_path = folder / sf_path
     if sf_path.exists():
         return str(sf_path)
+    log.error("Configured '%s' soundfont does not exist: %s", key, sf_path)
     return None
 
 
@@ -493,7 +485,7 @@ def find_file(folder: Path, keyword: str) -> Path | None:
 
 def run_command(cmd_parts: list, *, env: dict | None = None) -> bool:
     """Execute a subprocess command."""
-    cmd_str = " ".join(str(p) for p in cmd_parts)
+    cmd_str = shlex.join(str(p) for p in cmd_parts)
     log.info("Executing: %s", cmd_str)
     try:
         completed = subprocess.run(
@@ -662,6 +654,25 @@ def run_phase_alignment_pair(
             peak_correlation=0.0,
             output_path=None,
         )
+    not_wav = next(
+        (p for p in (reference_audio, target_audio) if p.suffix.lower() != ".wav"),
+        None,
+    )
+    if not_wav is not None:
+        log.warning(
+            "%s alignment skipped: %s is not a WAV file (phase alignment requires WAV input).",
+            pair_label,
+            not_wav.name,
+        )
+        return AlignmentResult(
+            applied=False,
+            reason=f"not a WAV file: {not_wav.name}",
+            lag_samples=0,
+            lag_ms=0.0,
+            confidence=0.0,
+            peak_correlation=0.0,
+            output_path=None,
+        )
     try:
         alignment = align_wav_to_reference(
             reference_audio,
@@ -701,6 +712,24 @@ def run_phase_alignment_pair(
         alignment.confidence,
     )
     return alignment
+
+
+def select_alignment_preview_source(
+    alignment: AlignmentResult,
+    aligned_output: Path,
+    dry_target: Path | None,
+) -> Path | None:
+    """Pick the preview-mix source for an alignment pair.
+
+    The aligned output is preferred only when alignment was actually applied;
+    on any skip or failure the dry target is used, so enabling an alignment
+    pair never removes an available stem from the preview.
+    """
+    if alignment.applied and aligned_output.exists():
+        return aligned_output
+    if dry_target is not None and dry_target.exists():
+        return dry_target
+    return None
 
 
 def build_phase_alignment_report_entry(
@@ -781,7 +810,7 @@ def main() -> None:
 
         sf2_drums = get_soundfont(config, folder, "drums")
         if not sf2_drums:
-            log.error("Missing or invalid 'drums' soundfont path in config. Aborting drum step.")
+            log.error("Cannot run drum cleaning without a usable 'drums' soundfont. Aborting.")
             sys.exit(1)
 
         log.info("[*] Cleaning Drums: %s", drum_file.name)
@@ -797,10 +826,6 @@ def main() -> None:
             "--tempo", str(song["bpm"]),
             "--midi-output", str(midi_out_path)
         ]
-        if drum_cfg.get("use_madmom", False):
-            cmd.extend(["--method", "madmom"])
-        else:
-            cmd.extend(["--method", "basic"])
 
         if not run_command(cmd, env=env):
             log.error("Drum cleaning failed; aborting.")
@@ -846,7 +871,7 @@ def main() -> None:
         log.info("[*] Generating Bass...")
         sf2_bass = get_soundfont(config, folder, "bass")
         if not sf2_bass:
-            log.warning("No 'bass' soundfont configured. Bass layer skipped.")
+            log.warning("Bass layer skipped: no usable 'bass' soundfont.")
         else:
             bass_cfg = pipe["generate_bass"]
             midi_out = gen_dir / "gen_bass.mid"
@@ -859,7 +884,8 @@ def main() -> None:
                 "--progression", str(song["progression"]),
                 "--bars", str(song["bars"]),
                 "--out", str(midi_out),
-                "--style", str(bass_cfg.get("style", "two_feel"))
+                "--style", str(bass_cfg.get("style", "two_feel")),
+                "--seed", str(song.get("seed", 0))
             ]
             if run_command(cmd, env=env) and midi_out.exists():
                 log.info("[*] Rendering Bass MIDI to WAV...")
@@ -886,8 +912,9 @@ def main() -> None:
                                 alignment,
                             )
                         )
-                        if alignment.applied and aligned_out.exists():
-                            generated_audio[-1] = aligned_out
+                        selected = select_alignment_preview_source(alignment, aligned_out, dry_bass_audio)
+                        if selected is not None:
+                            generated_audio[-1] = selected
 
                     if bass_cfg.get("sidechain_ducking"):
                         ducked_out = gen_dir / "gen_bass_ducked.wav"
@@ -916,7 +943,7 @@ def main() -> None:
         log.info("[*] Generating Arp...")
         sf2_arp = get_soundfont(config, folder, "arp")
         if not sf2_arp:
-            log.warning("No 'arp' soundfont configured. Arp layer skipped.")
+            log.warning("Arp layer skipped: no usable 'arp' soundfont.")
         else:
             arp_cfg = pipe["generate_arp"]
             midi_out = gen_dir / "gen_arp.mid"
@@ -930,7 +957,8 @@ def main() -> None:
                 "--bars", str(song["bars"]),
                 "--out", str(midi_out),
                 "--style", str(arp_cfg.get("style", "eighths")),
-                "--motion", str(arp_cfg.get("motion", "updown"))
+                "--motion", str(arp_cfg.get("motion", "updown")),
+                "--seed", str(song.get("seed", 0))
             ]
             if run_command(cmd, env=env) and midi_out.exists():
                 log.info("[*] Rendering Arp MIDI to WAV...")
@@ -951,7 +979,7 @@ def main() -> None:
         if not synth_file:
             log.warning("Synth stem not found. Skipping synth layer.")
         elif not sf2_synth:
-            log.warning("No 'synth' soundfont configured. Skipping synth layer.")
+            log.warning("Synth layer skipped: no usable 'synth' soundfont.")
         else:
             log.info("[*] Cleaning Synth: %s", synth_file.name)
             cleaned_path = gen_dir / f"gen_{synth_file.stem}_clean.wav"
@@ -1012,8 +1040,9 @@ def main() -> None:
                         alignment,
                     )
                 )
-                if alignment.applied and overheads_out.exists():
-                    generated_audio.append(overheads_out)
+                preview_source = select_alignment_preview_source(alignment, overheads_out, overheads_file)
+                if preview_source is not None:
+                    generated_audio.append(preview_source)
 
         if phase_cfg.get("pair_bass_guitars"):
             guitars_keyword = config.get("stems", {}).get("guitars", "guitars")
@@ -1057,8 +1086,9 @@ def main() -> None:
                         alignment,
                     )
                 )
-                if alignment.applied and guitars_out.exists():
-                    generated_audio.append(guitars_out)
+                preview_source = select_alignment_preview_source(alignment, guitars_out, guitars_file)
+                if preview_source is not None:
+                    generated_audio.append(preview_source)
 
         report_path = write_phase_alignment_report(gen_dir, phase_alignment_entries)
         if report_path:
@@ -1069,31 +1099,41 @@ def main() -> None:
         log.info("[*] Mixing Preview...")
         if not shutil.which("ffmpeg"):
             log.warning("Skipping preview mix: ffmpeg is not available on PATH.")
-            log.info("  Stems:   %s/gen_*.wav", gen_dir)
+            log.info("  Stems:   %s", gen_dir / "gen_*.wav")
             log.info("  Folder:  %s", gen_dir)
             return
         inputs = []
         for audio in generated_audio:
             inputs.extend(["-i", str(audio)])
         filter_complex = build_preview_mix_filter(len(generated_audio))
+
+        def try_preview(preview_path: Path) -> bool:
+            cmd = [
+                "ffmpeg",
+                "-y",
+                *inputs,
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[mix]",
+                str(preview_path),
+            ]
+            return run_command(cmd, env=env) and preview_path.exists()
+
+        # MP3 needs an encoder (libmp3lame) that not every ffmpeg build ships;
+        # fall back to WAV so the preview step never fails on encoder support.
         preview_path = gen_dir / "preview_mix.mp3"
-        cmd = [
-            "ffmpeg",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            filter_complex,
-            "-map",
-            "[mix]",
-            str(preview_path),
-        ]
-        ok = run_command(cmd, env=env)
-        if ok and preview_path.exists():
+        ok = try_preview(preview_path)
+        if not ok:
+            log.warning("MP3 preview failed; retrying as WAV.")
+            preview_path = gen_dir / "preview_mix.wav"
+            ok = try_preview(preview_path)
+        if ok:
             log.info("Workflow Complete.")
             log.info("  Preview: %s", preview_path)
         else:
             log.warning("Workflow Complete (with warnings). Preview mix was not created.")
-        log.info("  Stems:   %s/gen_*.wav", gen_dir)
+        log.info("  Stems:   %s", gen_dir / "gen_*.wav")
         log.info("  Folder:  %s", gen_dir)
     else:
         log.warning("No generated audio to mix. Nothing to preview.")

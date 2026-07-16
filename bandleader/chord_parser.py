@@ -16,13 +16,11 @@ Public API:
     parse_progression_roots(prog)         -- (Legacy) bass-style parser
     parse_progression_with_quality(prog)  -- Standard parser (root, quality)
     parse_progression_full(prog)          -- Extended parser (root, quality, bass)
-    voice_chord_set(triad, prev, center)  -- voice-leading voicing for pad mode
 """
 
 from __future__ import annotations
 
 import re
-from itertools import product
 from typing import Dict, List, Optional, Tuple
 
 
@@ -30,19 +28,16 @@ from typing import Dict, List, Optional, Tuple
 # Constants
 # ---------------------------------------------------------------------------
 
+# Natural note letters only: CHORD_TOKEN_RE captures a single root letter and
+# accidentals separately, so sharp/flat offsets are applied arithmetically.
 NOTE_TO_PC: Dict[str, int] = {
-    "C": 0,  "B#": 0,
-    "C#": 1, "DB": 1,
+    "C": 0,
     "D": 2,
-    "D#": 3, "EB": 3,
-    "E": 4,  "FB": 4,
-    "F": 5,  "E#": 5,
-    "F#": 6, "GB": 6,
+    "E": 4,
+    "F": 5,
     "G": 7,
-    "G#": 8, "AB": 8,
     "A": 9,
-    "A#": 10, "BB": 10,
-    "B": 11, "CB": 11,
+    "B": 11,
 }
 
 # Updated to cleanly capture slash bass notes, keeping them out of the 'qual' group.
@@ -154,7 +149,9 @@ def parse_quality(token: str) -> str:
     if "aug" in q or "+" in q:
         return "aug"
 
-    if "dim" in q or "°" in q or "ø" in q or re.search(r"(?<!maj)(?<!major)\bo\b", q):
+    # Standalone 'o' (diminished shorthand) must not be a letter-adjacent 'o'
+    # as in 'dom'; digits may follow it ('o7' = diminished seventh).
+    if "dim" in q or "°" in q or "ø" in q or re.search(r"(?<![a-z])o(?![a-z])", q):
         return "dim"
 
     q_stripped = q.lstrip()
@@ -261,58 +258,3 @@ def parse_progression_full(prog: str) -> List[List[Tuple[int, str, Optional[int]
 
 # Alias used elsewhere (keep as canonical name)
 parse_progression = parse_progression_with_quality
-
-
-# ---------------------------------------------------------------------------
-# Voicing helper (pad mode)
-# ---------------------------------------------------------------------------
-
-def voice_chord_set(
-    chord_pcs: List[int],
-    prev_notes: Optional[List[int]] = None,
-    *,
-    center: int = 60,
-    search_octaves: Tuple[int, int] = (2, 6),
-) -> List[int]:
-    """
-    Given a set of chord pitch classes, pick a voiced chord (MIDI notes) that is:
-      - close to the previous voicing (minimize movement) if provided
-      - close to a center MIDI note (default 60=C4)
-      - reasonably compact (avoid huge spreads)
-    """
-    prev_notes = sorted(prev_notes or [])
-    pcs = sorted({pc % 12 for pc in chord_pcs})
-    if not pcs:
-        return []
-
-    # Candidate MIDI notes for each pc across a limited octave range
-    lo_oct, hi_oct = search_octaves
-    candidates_by_pc = {
-        pc: [pc_to_midi(pc, o) for o in range(lo_oct, hi_oct + 1)]
-        for pc in pcs
-    }
-
-    # If no previous voicing, choose the closest set to center by greedy selection
-    if not prev_notes:
-        chosen = [min(candidates_by_pc[pc], key=lambda n: abs(n - center)) for pc in pcs]
-        return sorted(chosen)
-
-    # Otherwise, brute-force a small search: choose one octave per pc, score against prev+center
-    best_score = float("inf")
-    best_voicing: List[int] = []
-
-    pc_lists = [candidates_by_pc[pc] for pc in pcs]
-    for combo in product(*pc_lists):
-        voicing = sorted(combo)
-        pair_len = min(len(voicing), len(prev_notes))
-        move = sum(abs(voicing[i] - prev_notes[i]) for i in range(pair_len))
-        chord_center = sum(voicing) / len(voicing)
-        center_pen = abs(chord_center - center)
-        spread_pen = (voicing[-1] - voicing[0]) * 0.1
-
-        score = move + 0.5 * center_pen + spread_pen
-        if score < best_score:
-            best_score = score
-            best_voicing = voicing
-
-    return best_voicing

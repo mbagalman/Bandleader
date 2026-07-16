@@ -10,6 +10,7 @@ song:
   time_signature: 4/4
   progression: "Am G | F | C G"    # Bars separated by |, chords within a bar by spaces
   bars: 32                          # Total bars to generate for MIDI layers
+  seed: 0                           # Integer seed for deterministic bass/arp output
 
 # Partial filename keywords used to locate stems in your song folder.
 # Bandleader will find the first file whose name contains this string (case-insensitive).
@@ -35,8 +36,6 @@ pipeline:
   # Re-synthesize drums from scratch via onset detection + FluidSynth
   clean_drums:
     enabled: true
-    use_madmom: false               # true = use neural net (requires: pip install -e ".[drums]")
-                                    # false = use librosa onset detection (no extra install needed)
     export_sidechain_trigger: false # true = export gen_sidechain_trigger.mid/.wav aligned to kick hits
 
   # Apply corrective EQ/compression to the vocal stem

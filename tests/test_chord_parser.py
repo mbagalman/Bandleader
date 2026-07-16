@@ -28,3 +28,26 @@ def test_triad_pcs_supports_dim_quality():
 
 def test_parse_bass_pc_returns_none_without_slash():
     assert parse_bass_pc("Fmaj7") is None
+
+
+def test_parse_quality_diminished_variants():
+    # Regression: "Co7" once parsed as major because the dim regex required a
+    # word boundary after 'o', which "o7" does not have.
+    assert parse_quality("Co") == "dim"
+    assert parse_quality("Co7") == "dim"
+    assert parse_quality("C°7") == "dim"
+    assert parse_quality("Cdim") == "dim"
+    assert parse_quality("Cdim7") == "dim"
+
+
+def test_parse_quality_common_variants():
+    assert parse_quality("C") == "maj"
+    assert parse_quality("Cmaj7") == "maj"
+    assert parse_quality("Cm") == "min"
+    assert parse_quality("C-") == "min"
+    assert parse_quality("Cmin7") == "min"
+    assert parse_quality("Caug") == "aug"
+    assert parse_quality("C+") == "aug"
+    assert parse_quality("Csus2") == "sus2"
+    assert parse_quality("Csus4") == "sus4"
+    assert parse_quality("Csus") == "sus4"

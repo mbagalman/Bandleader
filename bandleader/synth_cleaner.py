@@ -1,16 +1,5 @@
 """
-Synth Transcription and Re-synthesis Tool v2.0
-
-Changelog (v2.0):
-- PACKAGE: Moved into bandleader package.
-- FEATURE: Added --preset lead|bass|pluck with sensible fmin/fmax/gate/smoothing defaults
-  per preset. Explicit CLI flags override preset values (preset is a default, not a lock).
-- LOGGING: Replaced print() with Python logging. Use --verbose / -v for debug output.
-
-v1.1:
-- FIX: warn_if_likely_polyphonic() was passing multiple strings as separate positional
-  arguments to print(), causing each fragment to appear on its own line with extra spacing.
-  Now uses a single string with explicit newline characters for clean output.
+Synth transcription and re-synthesis tool.
 
 This script takes a "fuzzy" monophonic synth track (WAV or MP3) and creates a clean version by:
 1) Transcribing the pitch contour (what notes are played and when)
@@ -41,8 +30,9 @@ import os
 import sys
 import argparse
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import mido
@@ -90,29 +80,36 @@ SYNTH_PRESETS = {
 }
 
 
-def convert_to_wav(input_file: str) -> str:
+def convert_to_wav(input_file: str) -> tuple[str, bool]:
     """
     Convert MP3 or other formats to WAV if needed.
-    Returns a path to a WAV file (may be original file if already WAV).
+    Returns (wav_path, created_temp). created_temp is True only when this
+    function wrote a new temporary file that the caller should delete;
+    the original input file is never flagged for deletion.
     """
     input_path = Path(input_file)
 
     if input_path.suffix.lower() == ".wav":
-        return str(input_path)
+        return str(input_path), False
 
     if not PYDUB_AVAILABLE:
         log.warning(
             "Cannot convert %s to WAV without pydub. Proceeding with original file: %s",
             input_path.suffix, input_file
         )
-        return str(input_path)
+        return str(input_path), False
 
     log.info("Converting %s to WAV...", input_file)
     audio = AudioSegment.from_file(input_file)
-    wav_path = input_path.with_suffix(".temp.wav")
-    audio.export(wav_path, format="wav")
-    log.info("Converted to %s", wav_path)
-    return str(wav_path)
+    # Unique temp path: a fixed sibling name could overwrite a pre-existing
+    # file (then delete it during cleanup) and races between concurrent runs.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f"{input_path.stem}_", suffix=".temp.wav", dir=str(input_path.parent)
+    )
+    os.close(fd)
+    audio.export(tmp_name, format="wav")
+    log.info("Converted to %s", tmp_name)
+    return tmp_name, True
 
 
 def estimate_tempo_bpm(audio_file: str) -> float:
@@ -126,7 +123,9 @@ def estimate_tempo_bpm(audio_file: str) -> float:
     y, sr = librosa.load(audio_file, sr=None, mono=True)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
 
-    tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)
+    # librosa.feature.tempo is the non-deprecated home of tempo estimation
+    # (librosa.beat.tempo is deprecated); it returns an array.
+    tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)
     bpm = float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
     return bpm
 
@@ -622,6 +621,9 @@ def main():
 
     # Set up file paths
     input_path = Path(args.input_file)
+    if not input_path.exists():
+        log.error("Input file not found: %s", input_path)
+        sys.exit(1)
     output_wav = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_synth_clean.wav")
     midi_path = Path(args.midi_output) if args.midi_output else input_path.with_name(f"{input_path.stem}_synth.mid")
 
@@ -630,8 +632,7 @@ def main():
 
     try:
         # Convert to WAV if needed
-        wav_file = convert_to_wav(args.input_file)
-        created_temp = wav_file.endswith(".temp.wav")
+        wav_file, created_temp = convert_to_wav(args.input_file)
 
         # Choose tempo
         tempo_bpm = choose_tempo_bpm(wav_file, args.tempo, args.use_tempo_estimate)
@@ -701,8 +702,9 @@ def main():
 
     except Exception as e:
         log.error("Error: %s", e)
-        import traceback
-        traceback.print_exc()
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
     finally:

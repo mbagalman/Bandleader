@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 """
-Rule-Based Bass Generator v2.2
+Rule-based bass generator.
 
-Changelog (v2.2):
-- FIX: Added `--time-signature` CLI argument to receive config from orchestrator.
-- FIX: Replaced strict pattern length validation with a safe modulo wrap, allowing
-  16-step grid patterns to adapt smoothly to non-4/4 time signatures like 3/4 or 6/8.
-
-Changelog (v2.1):
-- FEATURE: Added harmonic awareness. Now respects Diminished, Augmented, and Sus chords.
-  Previously, the bass blindly played perfect 5ths. Now it calculates the 5th based on
-  chord quality (e.g., playing a b5 for dim chords).
-- REFACTOR: Switched from `parse_progression_roots` to `parse_progression_with_quality`.
+Generates deterministic MIDI basslines from a chord progression. Harmonically
+aware: respects diminished, augmented, and sus chord qualities when choosing
+fifths. Supports non-4/4 time signatures via denominator-aware grid sizing.
 
 Usage:
   bandleader-bass --progression "Am G | F | C/G" --style two_feel
@@ -25,6 +18,7 @@ import logging
 import random
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import mido
@@ -36,6 +30,7 @@ from bandleader.chord_parser import (
     parse_progression_with_quality,
     triad_pcs,
 )
+from bandleader.cli_args import float_in_range, int_in_range, positive_int
 
 log = logging.getLogger(__name__)
 
@@ -218,6 +213,8 @@ def generate_bass_events(
 # -----------------------------
 
 def write_midi(events, out_path, bpm, program=34, channel=0, ticks_per_beat=960):
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     mid = MidiFile(ticks_per_beat=ticks_per_beat)
     track = MidiTrack()
     mid.tracks.append(track)
@@ -247,23 +244,46 @@ def write_midi(events, out_path, bpm, program=34, channel=0, ticks_per_beat=960)
 # CLI
 # -----------------------------
 
+BASS_PATTERNS = {
+    "two_feel":      (1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0),
+    "four_on_floor": (1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0),
+    "eighths":       (1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0),
+    "disco":         (0,0,1,0, 1,0,1,0, 0,0,1,0, 1,0,1,0),
+}
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Rule-Based Bass Generator v2.2")
-    parser.add_argument("--progression", required=True, help='Chord progression')
-    parser.add_argument("--bars", type=int, default=32)
-    parser.add_argument("--bpm", type=float, default=120.0)
-    parser.add_argument("--time-signature", default="4/4", help="Time signature, e.g., '4/4' or '3/4'")
-    parser.add_argument("--out", default="bass.mid")
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--style", default="two_feel")
-    parser.add_argument("--legato", type=float, default=0.95)
-    parser.add_argument("--base-octave", type=int, default=2)
-    parser.add_argument("--program", type=int, default=34)
-    parser.add_argument("--channel", type=int, default=0)
-    parser.add_argument("--weak-prob", type=float, default=0.15)
-    parser.add_argument("--approach-prob", type=float, default=0.06)
-    parser.add_argument("--approach", choices=["safe", "chromatic"], default="safe")
-    parser.add_argument("--verbose", "-v", action="store_true")
+    parser = argparse.ArgumentParser(description="Rule-based bass generator")
+    parser.add_argument("--progression", required=True,
+                        help='Chord progression, e.g., "Am G | F | C/G"')
+    parser.add_argument("--bars", type=positive_int, default=32,
+                        help="Total bars to generate (default: 32)")
+    parser.add_argument("--bpm", type=float_in_range(4.0, 1000.0), default=120.0,
+                        help="Tempo in BPM, 4-1000 (default: 120; MIDI cannot encode tempos below ~4 BPM)")
+    parser.add_argument("--time-signature", default="4/4",
+                        help="Time signature, e.g., '4/4' or '3/4'")
+    parser.add_argument("--out", default="bass.mid",
+                        help="Output MIDI file (default: bass.mid)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed for reproducible output")
+    parser.add_argument("--style", choices=sorted(BASS_PATTERNS), default="two_feel",
+                        help="Bass rhythm pattern (default: two_feel)")
+    parser.add_argument("--legato", type=float_in_range(0.0, 1.0), default=0.95,
+                        help="Note duration factor 0.0-1.0 (default: 0.95)")
+    parser.add_argument("--base-octave", type=int_in_range(0, 8), default=2,
+                        help="Base octave for bass notes 0-8 (default: 2)")
+    parser.add_argument("--program", type=int_in_range(0, 127), default=34,
+                        help="MIDI program number 0-127 (default: 34 = Electric Bass)")
+    parser.add_argument("--channel", type=int_in_range(0, 15), default=0,
+                        help="MIDI channel 0-15 (default: 0)")
+    parser.add_argument("--weak-prob", type=float_in_range(0.0, 1.0), default=0.15,
+                        help="Probability of an extra weak-beat hit per bar (default: 0.15)")
+    parser.add_argument("--approach-prob", type=float_in_range(0.0, 1.0), default=0.06,
+                        help="Probability of an approach note per bar (default: 0.06)")
+    parser.add_argument("--approach", choices=["safe", "chromatic"], default="safe",
+                        help="Approach-note style (default: safe)")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable debug output")
 
     args = parser.parse_args()
 
@@ -279,21 +299,18 @@ def main():
     except ValueError as e:
         log.error("Error parsing progression: %s", e)
         sys.exit(1)
-        
+
     try:
         ts_num, ts_den = map(int, args.time_signature.strip().split('/'))
         ts = TimeSignature(numerator=ts_num, denominator=ts_den)
+        if ts_num <= 0 or ts_den <= 0:
+            raise ValueError("time signature values must be positive")
     except ValueError:
-        log.error("Invalid time signature format. Use 'numerator/denominator' e.g. '4/4'")
+        log.error("Invalid time signature %r. Use 'numerator/denominator' with positive integers, e.g. '4/4'.",
+                  args.time_signature)
         sys.exit(1)
 
-    patterns = {
-        "two_feel":      (1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0),
-        "four_on_floor": (1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0),
-        "eighths":       (1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0),
-        "disco":         (0,0,1,0, 1,0,1,0, 0,0,1,0, 1,0,1,0),
-    }
-    selected_pat = patterns.get(args.style, patterns["two_feel"])
+    selected_pat = BASS_PATTERNS[args.style]
 
     style = BassStyle(
         pattern_16=selected_pat,
