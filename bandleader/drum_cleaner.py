@@ -325,10 +325,10 @@ def render_midi_with_fluidsynth(
 
     try:
         subprocess.run(["fluidsynth", "--version"], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         raise RuntimeError(
             "FluidSynth not found. Please install it and ensure it's on your PATH."
-        ) from exc
+        ) from e
 
     if not os.path.exists(soundfont):
         raise FileNotFoundError(f"Soundfont not found: {soundfont}")

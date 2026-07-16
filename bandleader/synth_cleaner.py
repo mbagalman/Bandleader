@@ -533,13 +533,13 @@ def render_midi_with_fluidsynth(
     # Check FluidSynth availability
     try:
         subprocess.run(["fluidsynth", "--version"], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         raise RuntimeError(
             "FluidSynth not found. Install it:\n"
             "  macOS: brew install fluid-synth\n"
             "  Linux: apt-get install fluidsynth\n"
             "  Windows: https://github.com/FluidSynth/fluidsynth/releases"
-        )
+        ) from e
 
     # Check soundfont exists
     if not os.path.exists(soundfont):
